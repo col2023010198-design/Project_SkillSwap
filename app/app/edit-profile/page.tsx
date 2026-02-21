@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import BottomNav from '@/components/BottomNav';
+import { updateProfile } from '@/lib/profile';
 
 export default function EditProfilePage() {
   const router = useRouter();
@@ -10,10 +11,10 @@ export default function EditProfilePage() {
     firstName: 'Ron',
     lastName: 'Hansen Person',
     username: 'ronhansen',
-    bio: 'Web developer passionate about teaching and learning new technologies.',
-    teachingSkills: 'JavaScript, React, Node.js',
-    learningSkills: 'Python, Data Science',
+    skillsToTeach: 'JavaScript, React, Node.js',
   });
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -23,8 +24,25 @@ export default function EditProfilePage() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+    setLoading(true);
+
+    const { error: updateError } = await updateProfile({
+      first_name: formData.firstName,
+      last_name: formData.lastName,
+      username: formData.username,
+      skills_to_teach_raw: formData.skillsToTeach,
+    });
+
+    setLoading(false);
+
+    if (updateError) {
+      setError(updateError);
+      return;
+    }
+
     router.push('/app/profile');
   };
 
@@ -81,34 +99,19 @@ export default function EditProfilePage() {
               required
             />
 
-            <textarea
-              name="bio"
-              placeholder="Bio"
-              value={formData.bio}
-              onChange={handleChange}
-              rows={3}
-              className="w-full px-4 py-3 rounded-lg bg-[#2d3f47] text-white placeholder-gray-500 border border-[#3a4f5a] focus:outline-none focus:border-[#5fa4c3] resize-none"
-            />
-
             <input
               type="text"
-              name="teachingSkills"
+              name="skillsToTeach"
               placeholder="Skills you can teach (comma-separated)"
-              value={formData.teachingSkills}
-              onChange={handleChange}
-              className="w-full px-4 py-3 rounded-lg bg-[#2d3f47] text-white placeholder-gray-500 border border-[#3a4f5a] focus:outline-none focus:border-[#5fa4c3]"
-            />
-
-            <input
-              type="text"
-              name="learningSkills"
-              placeholder="Skills you want to learn (comma-separated)"
-              value={formData.learningSkills}
+              value={formData.skillsToTeach}
               onChange={handleChange}
               className="w-full px-4 py-3 rounded-lg bg-[#2d3f47] text-white placeholder-gray-500 border border-[#3a4f5a] focus:outline-none focus:border-[#5fa4c3]"
             />
           </div>
 
+          {error && (
+            <p className="text-red-400 text-sm text-center pt-2">{error}</p>
+          )}
           <div className="flex gap-4 pt-6">
             <button
               type="button"
@@ -119,9 +122,10 @@ export default function EditProfilePage() {
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-3 bg-[#5fa4c3] text-white rounded-full font-medium hover:bg-[#4a8fb5] transition-colors"
+              disabled={loading}
+              className="flex-1 px-4 py-3 bg-[#5fa4c3] text-white rounded-full font-medium hover:bg-[#4a8fb5] transition-colors disabled:opacity-60"
             >
-              Save
+              {loading ? 'Saving...' : 'Save'}
             </button>
           </div>
         </form>
