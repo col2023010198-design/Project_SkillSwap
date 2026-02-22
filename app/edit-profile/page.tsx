@@ -13,6 +13,7 @@ export default function EditProfilePage() {
     firstName: '',
     lastName: '',
     username: '',
+    bio: '',
     skillsToTeach: '',
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -32,6 +33,7 @@ export default function EditProfilePage() {
           firstName: profile.first_name || '',
           lastName: profile.last_name || '',
           username: profile.username || '',
+          bio: profile.bio || '',
           skillsToTeach: profile.skills_to_teach?.join(', ') || '',
         });
         setCurrentAvatarUrl(profile.avatar_url);
@@ -141,6 +143,7 @@ export default function EditProfilePage() {
       first_name: formData.firstName,
       last_name: formData.lastName,
       username: formData.username,
+      bio: formData.bio,
       skills_to_teach_raw: formData.skillsToTeach,
       avatar_url: avatarUrl,
     });
@@ -239,6 +242,15 @@ export default function EditProfilePage() {
               onChange={handleChange}
               className="w-full px-4 py-3 rounded-lg bg-[#2d3f47] text-white placeholder-gray-500 border border-[#3a4f5a] focus:outline-none focus:border-[#5fa4c3]"
               required
+            />
+
+            <textarea
+              name="bio"
+              placeholder="Bio (optional)"
+              value={formData.bio}
+              onChange={handleChange}
+              rows={3}
+              className="w-full px-4 py-3 rounded-lg bg-[#2d3f47] text-white placeholder-gray-500 border border-[#3a4f5a] focus:outline-none focus:border-[#5fa4c3] resize-none"
             />
 
             <input
