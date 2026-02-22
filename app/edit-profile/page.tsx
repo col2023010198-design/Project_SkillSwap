@@ -4,15 +4,16 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import BottomNav from '@/components/BottomNav';
 import { updateProfile, fetchProfile } from '@/lib/profile';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 
 export default function EditProfilePage() {
   const router = useRouter();
+  const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    username: '',
+    bio: '',
     skillsToTeach: '',
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
@@ -29,9 +30,9 @@ export default function EditProfilePage() {
         setError(fetchError);
       } else if (profile) {
         setFormData({
-          firstName: profile.first_name || '',
-          lastName: profile.last_name || '',
-          username: profile.username || '',
+          firstName: profile.firstName || '',
+          lastName: profile.lastName || '',
+          bio: profile.bio || '',
           skillsToTeach: profile.skills_to_teach?.join(', ') || '',
         });
         setCurrentAvatarUrl(profile.avatar_url);
@@ -95,53 +96,20 @@ export default function EditProfilePage() {
 
     let avatarUrl = currentAvatarUrl;
 
-    // Upload avatar to Supabase storage if a new file was selected
-    if (avatarFile) {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (!session) {
-          setError('Not authenticated');
-          setLoading(false);
-          return;
-        }
-
-        const userId = session.user.id;
-        const fileExt = avatarFile.name.split('.').pop();
-        const fileName = `${userId}/${Date.now()}.${fileExt}`;
-
-        // Upload file to avatars bucket
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(fileName, avatarFile, {
-            cacheControl: '3600',
-            upsert: false,
-          });
-
-        if (uploadError) {
-          setError(`Upload failed: ${uploadError.message}`);
-          setLoading(false);
-          return;
-        }
-
-        // Get public URL
-        const { data: urlData } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(fileName);
-
-        avatarUrl = urlData.publicUrl;
-      } catch (err) {
-        setError('Failed to upload avatar');
-        setLoading(false);
-        return;
-      }
+    // For local auth, we'll store avatar as data URL if a file was selected
+    if (avatarFile && previewUrl) {
+      avatarUrl = previewUrl;
     }
 
-    // Update profile with avatar URL
+    // Update profile
     const { error: updateError } = await updateProfile({
-      first_name: formData.firstName,
-      last_name: formData.lastName,
-      username: formData.username,
-      skills_to_teach_raw: formData.skillsToTeach,
+      firstName: formData.firstName,
+      lastName: formData.lastName,
+      bio: formData.bio,
+      skills_to_teach: formData.skillsToTeach
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
       avatar_url: avatarUrl,
     });
 
@@ -152,7 +120,7 @@ export default function EditProfilePage() {
       return;
     }
 
-    router.push('/app/profile');
+    router.push('/home');
   };
 
   return (
@@ -233,12 +201,11 @@ export default function EditProfilePage() {
 
             <input
               type="text"
-              name="username"
-              placeholder="Username"
-              value={formData.username}
+              name="bio"
+              placeholder="Bio (optional)"
+              value={formData.bio}
               onChange={handleChange}
               className="w-full px-4 py-3 rounded-lg bg-[#2d3f47] text-white placeholder-gray-500 border border-[#3a4f5a] focus:outline-none focus:border-[#5fa4c3]"
-              required
             />
 
             <input

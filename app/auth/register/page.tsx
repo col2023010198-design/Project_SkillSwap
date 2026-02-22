@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -59,7 +59,9 @@ function FieldError({ msg }: { msg: string | undefined }) {
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { signup } = useAuth();
 
+  const [username, setUsername]             = useState('');
   const [email, setEmail]                   = useState('');
   const [password, setPassword]             = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -74,14 +76,16 @@ export default function RegisterPage() {
   // ── Real-time validation ──
   const errors = useMemo(() => {
     const e: Record<string, string> = {};
+    if (!username)                                e.username = 'Username is required.';
+    else if (username.length < 3)                e.username = 'Username must be at least 3 characters.';
     if (!email)                                   e.email = 'Email is required.';
     else if (!isValidEmail(email))                e.email = 'Enter a valid email address.';
     if (!password)                                e.password = 'Password is required.';
-    else if (password.length < 8)                 e.password = 'Password must be at least 8 characters.';
+    else if (password.length < 6)                 e.password = 'Password must be at least 6 characters.';
     if (!confirmPassword)                         e.confirmPassword = 'Please confirm your password.';
     else if (confirmPassword !== password)        e.confirmPassword = 'Passwords do not match.';
     return e;
-  }, [email, password, confirmPassword]);
+  }, [username, email, password, confirmPassword]);
 
   const isFormValid = Object.keys(errors).length === 0;
   const role = deriveRole(email);
@@ -90,54 +94,23 @@ export default function RegisterPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     // Mark all fields touched to surface any remaining errors
-    setTouched({ email: true, password: true, confirmPassword: true });
+    setTouched({ username: true, email: true, password: true, confirmPassword: true });
     if (!isFormValid) return;
 
     setSubmitError(null);
     setLoading(true);
 
-    // Check if user already exists
-    const { data: existingUser } = await supabase.auth.signInWithPassword({
-      email,
-      password: 'test', // dummy password to check if user exists
-    });
-
-    if (existingUser?.user) {
-      setLoading(false);
-      setSubmitError('This email is already registered. Please log in instead.');
-      return;
-    }
-
-    const { data, error: signUpError } = await supabase.auth.signUp({ 
-      email, 
-      password,
-    });
+    const result = await signup(username, email, password);
 
     setLoading(false);
 
-    if (signUpError) {
-      // Handle specific error types
-      if (signUpError.message.toLowerCase().includes('rate limit')) {
-        setSubmitError(
-          'Too many verification emails sent. Please wait a few minutes before trying again, or contact support if this persists.'
-        );
-      } else if (signUpError.message.toLowerCase().includes('already registered')) {
-        setSubmitError('This email is already registered. Please log in instead.');
-      } else {
-        setSubmitError(signUpError.message);
-      }
+    if (!result.success) {
+      setSubmitError(result.error || 'Registration failed. Please try again.');
       return;
     }
 
-    // If user was created but email is not confirmed, proceed to verify
-    if (data?.user && !data.user.confirmed_at) {
-      router.push(`/auth/verify?email=${encodeURIComponent(email)}`);
-    } else if (data?.user && data.user.confirmed_at) {
-      // User already confirmed (shouldn't happen in signup, but handle it)
-      router.push('/auth/details');
-    } else {
-      setSubmitError('Registration failed. Please try again.');
-    }
+    // Registration successful, redirect to details page
+    router.push('/auth/details');
   };
 
   // ── Render ──
@@ -152,6 +125,19 @@ export default function RegisterPage() {
         </div>
 
         <form onSubmit={handleRegister} className="flex flex-col gap-3" noValidate>
+
+          {/* Username */}
+          <div>
+            <input
+              type="text"
+              placeholder="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              onBlur={() => touch('username')}
+              className={`w-full px-4 py-3 rounded-lg bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#5fa4c3] ${touched.username && errors.username ? 'ring-2 ring-red-400' : ''}`}
+            />
+            {touched.username && <FieldError msg={errors.username} />}
+          </div>
 
           {/* Email + role badge */}
           <div>

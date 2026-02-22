@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 
 function EyeIcon({ open }: { open: boolean }) {
   return open ? (
@@ -20,7 +20,8 @@ function EyeIcon({ open }: { open: boolean }) {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const { login, user } = useAuth();
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,45 +32,20 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
-    // Step 1: Authenticate with Supabase
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-
-    if (authError || !authData.session) {
-      setLoading(false);
-      setError('Invalid email or password. Please try again.');
-      return;
-    }
-
-    // Step 2: Check if user has completed profile setup
-    const userId = authData.session.user.id;
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('first_name, last_name, username')
-      .eq('id', userId)
-      .single();
+    const result = await login(username, password);
 
     setLoading(false);
 
-    if (profileError) {
-      setError('Error loading profile. Please try again.');
+    if (!result.success) {
+      setError(result.error || 'Login failed. Please try again.');
       return;
     }
 
-    // Step 3: Validate profile completion
-    const isProfileComplete = 
-      profile?.first_name && 
-      profile?.last_name && 
-      profile?.username;
-
-    if (!isProfileComplete) {
-      // Profile incomplete - redirect to details page
-      router.push('/auth/details');
-    } else {
-      // Profile complete - proceed to home
+    // Check if profile is complete
+    if (user?.profile?.isProfileComplete) {
       router.push('/home');
+    } else {
+      router.push('/auth/details');
     }
   };
 
@@ -83,10 +59,10 @@ export default function LoginPage() {
 
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
           <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="text"
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             className="w-full px-4 py-3 rounded-lg bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#5fa4c3]"
             required
           />

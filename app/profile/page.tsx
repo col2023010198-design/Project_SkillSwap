@@ -55,8 +55,8 @@ export default function ProfilePage() {
   }, []);
 
   const fullName =
-    profile?.first_name || profile?.last_name
-      ? `${profile.first_name ?? ''} ${profile.last_name ?? ''}`.trim()
+    profile?.firstName || profile?.lastName
+      ? `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim()
       : 'Your Name';
 
   const initials = fullName
@@ -109,9 +109,6 @@ export default function ProfilePage() {
                     <h2 className="text-2xl font-bold text-white">{fullName}</h2>
                     {profile?.is_verified && <VerifiedBadge />}
                   </div>
-                  {profile?.username && (
-                    <p className="text-gray-400">@{profile.username}</p>
-                  )}
                   {profile?.role && (
                     <p className="text-xs text-[#5fa4c3] capitalize font-medium">
                       {profile.role}
@@ -119,29 +116,9 @@ export default function ProfilePage() {
                   )}
                 </div>
 
-                {/* Stats */}
-                <div className="flex gap-8 w-full justify-center pt-4 border-t border-[#3a4f5a]">
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-[#5fa4c3]">
-                      {profile?.connections_count ?? 0}
-                    </p>
-                    <p className="text-xs text-gray-400">Connections</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-[#5fa4c3]">
-                      {profile?.rating != null
-                        ? Number(profile.rating).toFixed(1)
-                        : '0.0'}
-                    </p>
-                    <p className="text-xs text-gray-400">Rating</p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-2xl font-bold text-[#5fa4c3]">
-                      {profile?.posts_count ?? 0}
-                    </p>
-                    <p className="text-xs text-gray-400">Posts</p>
-                  </div>
-                </div>
+                {profile?.bio && (
+                  <p className="text-gray-400 text-sm text-center">{profile.bio}</p>
+                )}
 
                 <Link
                   href="/app/edit-profile"

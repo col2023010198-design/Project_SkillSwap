@@ -1,19 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 
 export default function DetailsPage() {
   const router = useRouter();
+  const { updateProfile, user, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
-    username: '',
+    bio: '',
     teachingSkills: '',
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push('/auth/login');
+    }
+  }, [isAuthenticated, router]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -25,38 +33,21 @@ export default function DetailsPage() {
     setError(null);
     setLoading(true);
 
-    // Get current authenticated user
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-    if (sessionError || !session) {
-      setError('Session expired. Please log in again.');
-      setLoading(false);
-      return;
-    }
-
-    // Update first_name, last_name, username, and skills_to_teach on the profile row
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        first_name:     formData.firstName.trim(),
-        last_name:      formData.lastName.trim(),
-        username:       formData.username.trim().toLowerCase(),
-        skills_to_teach: formData.teachingSkills
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', session.user.id);
+    const result = await updateProfile({
+      firstName: formData.firstName.trim(),
+      lastName: formData.lastName.trim(),
+      bio: formData.bio.trim(),
+      skills_to_teach: formData.teachingSkills
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      isProfileComplete: true,
+    });
 
     setLoading(false);
 
-    if (updateError) {
-      if (updateError.code === '23505') {
-        setError('That username is already taken. Please choose another.');
-      } else {
-        setError(updateError.message);
-      }
+    if (!result.success) {
+      setError(result.error || 'Failed to update profile.');
       return;
     }
 
@@ -65,8 +56,7 @@ export default function DetailsPage() {
 
   const isValid =
     formData.firstName.trim() &&
-    formData.lastName.trim() &&
-    formData.username.trim();
+    formData.lastName.trim();
 
   return (
     <div className="h-screen w-full flex flex-col items-center justify-center bg-gradient-to-b from-[#2d3f47] to-[#1a2c36] p-6 overflow-hidden">
@@ -97,12 +87,11 @@ export default function DetailsPage() {
           />
           <input
             type="text"
-            name="username"
-            placeholder="Username"
-            value={formData.username}
+            name="bio"
+            placeholder="Bio (optional)"
+            value={formData.bio}
             onChange={handleChange}
             className="w-full px-4 py-3 rounded-lg bg-white text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-[#5fa4c3]"
-            required
           />
           <input
             type="text"
