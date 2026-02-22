@@ -14,7 +14,6 @@ export interface Profile {
   avatar_url: string | null
   role: 'student' | 'professional' | null
   is_verified: boolean
-  connections_count: number
   posts_count: number
   rating: number
   skills_to_teach: string[]
