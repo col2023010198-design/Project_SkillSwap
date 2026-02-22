@@ -188,7 +188,6 @@ export async function fetchProfile(): Promise<FetchProfileResult> {
        avatar_url,
        role,
        is_verified,
-       connections_count,
        posts_count,
        rating,
        skills_to_teach`
