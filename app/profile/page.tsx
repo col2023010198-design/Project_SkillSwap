@@ -114,6 +114,15 @@ export default function ProfilePage() {
                   )}
                 </div>
 
+                {/* Bio */}
+                <p className="text-center mt-4 px-4">
+                  {profile?.bio?.trim() ? (
+                    <span className="text-gray-400">{profile.bio}</span>
+                  ) : (
+                    <span className="text-gray-500 italic">No Bio</span>
+                  )}
+                </p>
+
                 {/* Stats */}
                 <div className="flex gap-8 w-full justify-center pt-4 border-t border-[#3a4f5a]">
                   <div className="text-center">
@@ -131,15 +140,6 @@ export default function ProfilePage() {
                     <p className="text-xs text-gray-400">Posts</p>
                   </div>
                 </div>
-
-                  {/* Bio */}
-                <p className="text-center mt-4 px-4">
-                  {profile?.bio?.trim() ? (
-                    <span className="text-gray-400">{profile.bio}</span>
-                  ) : (
-                    <span className="text-gray-500 italic">No Bio</span>
-                  )}
-                </p>
 
                   {/* Edit Profile Button */}
                 <Link
