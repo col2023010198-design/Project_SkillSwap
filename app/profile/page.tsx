@@ -114,11 +114,6 @@ export default function ProfilePage() {
                   )}
                 </div>
 
-                {/* Bio */}
-                {profile?.bio && (
-                  <p className="text-sm text-gray-300 mt-2">{profile.bio}</p>
-                )}
-
                 {/* Stats */}
                 <div className="flex gap-8 w-full justify-center pt-4 border-t border-[#3a4f5a]">
                   <div className="text-center">
@@ -136,6 +131,11 @@ export default function ProfilePage() {
                     <p className="text-xs text-gray-400">Posts</p>
                   </div>
                 </div>
+
+                  {/* Bio */}
+                {profile?.bio && (
+                  <p className="text-center text-gray-400 mt-4 px-4">{profile.bio}</p>
+                )}
 
                   {/* Edit Profile Button */}
                 <Link
