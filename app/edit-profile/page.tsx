@@ -246,7 +246,7 @@ export default function EditProfilePage() {
 
             <textarea
               name="bio"
-              placeholder="Bio (optional)"
+              placeholder="Tell others about yourself..."
               value={formData.bio}
               onChange={handleChange}
               rows={3}

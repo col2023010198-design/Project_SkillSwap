@@ -112,6 +112,11 @@ export default function ProfilePage() {
                       {profile.role}
                     </p>
                   )}
+                  {profile?.bio ? (
+                    <p className="text-gray-300 text-sm leading-relaxed mt-1">{profile.bio}</p>
+                  ) : (
+                    <p className="text-xs text-gray-500 italic mt-1">No bio yet</p>
+                  )}
                 </div>
 
                 {/* Bio */}

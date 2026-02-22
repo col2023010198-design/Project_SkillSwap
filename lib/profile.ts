@@ -11,9 +11,9 @@ export interface Profile {
   first_name: string | null
   last_name: string | null
   username: string | null
+  bio: string | null
   avatar_url: string | null
   role: 'student' | 'professional' | null
-  bio: string | null
   is_verified: boolean
   posts_count: number
   rating: number
@@ -29,6 +29,7 @@ export interface UpdateProfileInput {
   first_name: string
   last_name: string
   username: string
+  bio?: string
   skills_to_teach_raw?: string
   avatar_url?: string | null
 }
@@ -41,10 +42,7 @@ export interface ProfileUpdateResult {
 // Helpers
 // ------------------------------------------------------------
 
-/**
- * Converts a comma-separated skills string into a clean string array.
- * e.g. "JavaScript, React,  Node.js" → ["JavaScript", "React", "Node.js"]
- */
+
 function parseSkills(raw: string | undefined): string[] {
   if (!raw || raw.trim() === '') return []
   return raw
@@ -53,18 +51,6 @@ function parseSkills(raw: string | undefined): string[] {
     .filter(Boolean)
 }
 
-/**
- * Derives the user's role from their email domain.
- *
- * Recognised academic patterns:
- *   - Ends with .edu          (e.g. user@mit.edu)
- *   - Contains .edu.          (e.g. user@cam.ac.edu.au)
- *   - Ends with .ac.XX        (e.g. user@ox.ac.uk)
- *   - Ends with .edu.XX       (e.g. user@uni.edu.ph)
- *   - Contains common academic keywords in the domain
- *
- * Everything else → 'professional'
- */
 function deriveRole(email: string): 'student' | 'professional' {
   const domain = email.split('@')[1]?.toLowerCase() ?? ''
 
@@ -83,21 +69,6 @@ function deriveRole(email: string): 'student' | 'professional' {
   return isAcademic ? 'student' : 'professional'
 }
 
-// ------------------------------------------------------------
-// Core function
-// ------------------------------------------------------------
-
-/**
- * Upserts the authenticated user's profile in public.profiles.
- *
- * - Maps form fields → DB columns (snake_case)
- * - Parses comma-separated skill strings → text[]
- * - Derives role from the email domain automatically
- * - Sets updated_at to the current timestamp
- *
- * Usage:
- *   const { error } = await updateProfile({ first_name, last_name, ... })
- */
 export async function updateProfile(
   input: UpdateProfileInput
 ): Promise<ProfileUpdateResult> {
@@ -126,9 +97,9 @@ export async function updateProfile(
     first_name: input.first_name.trim(),
     last_name: input.last_name.trim(),
     username: input.username.trim().toLowerCase(),
+    bio: input.bio?.trim() ?? null,
     skills_to_teach: skills_to_teach,
     role,
-    bio: input ?? '', // Placeholder - can be extended to accept bio input in the future
     updated_at: new Date().toISOString(),
     ...(input.avatar_url !== undefined && { avatar_url: input.avatar_url }),
   }
@@ -157,7 +128,7 @@ export async function updateProfile(
  * Fetches the authenticated user's full profile from public.profiles.
  *
  * Retrieves:
- *   - Header data: connections_count, rating, posts_count
+ *   - Header data: bio, rating, posts_count
  *   - Verification badge: is_verified
  *   - Skill tag arrays: skills_to_teach
  *   - Identity fields: first_name, last_name, username, , avatar_url, role
@@ -186,9 +157,9 @@ export async function fetchProfile(): Promise<FetchProfileResult> {
        first_name,
        last_name,
        username,
+       bio,
        avatar_url,
        role,
-       bio,
        is_verified,
        posts_count,
        rating,
