@@ -60,7 +60,7 @@ export default function DetailsPage() {
       return;
     }
 
-    router.push('/app/home');
+    router.push('/home');
   };
 
   const isValid =

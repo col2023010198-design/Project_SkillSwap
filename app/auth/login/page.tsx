@@ -69,7 +69,7 @@ export default function LoginPage() {
       router.push('/auth/details');
     } else {
       // Profile complete - proceed to home
-      router.push('/app/home');
+      router.push('/home');
     }
   };
 

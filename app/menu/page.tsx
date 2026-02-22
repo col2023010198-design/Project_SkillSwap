@@ -22,7 +22,7 @@ export default function MenuPage() {
         {/* Menu Items */}
         <div className="divide-y divide-[#3a4f5a]">
           <Link
-            href="/app/profile"
+            href="/profile"
             className="flex items-center justify-between p-4 hover:bg-[#2d3f47] transition-colors border-b border-[#3a4f5a]"
           >
             <div className="flex items-center gap-3">
@@ -37,7 +37,7 @@ export default function MenuPage() {
           </Link>
 
           <button
-            onClick={() => router.push('/app/home')}
+            onClick={() => router.push('/home')}
             className="w-full text-left flex items-center justify-between p-4 hover:bg-[#2d3f47] transition-colors border-b border-[#3a4f5a]"
           >
             <div className="flex items-center gap-3">

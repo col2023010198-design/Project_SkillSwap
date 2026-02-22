@@ -14,7 +14,7 @@ export default function CreatePostPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     // Handle post creation
-    router.push('/app/home');
+    router.push('/home');
   };
 
   return (

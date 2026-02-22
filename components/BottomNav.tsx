@@ -11,7 +11,7 @@ export default function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-[#2d3f47] border-t border-[#3a4f5a] flex justify-around items-center h-16">
       <Link
-        href="/app/home"
+        href="/home"
         className={`flex flex-col items-center justify-center w-16 h-16 transition-colors ${
           isActive('/home') ? 'text-[#5fa4c3]' : 'text-gray-400 hover:text-gray-300'
         }`}
@@ -22,7 +22,7 @@ export default function BottomNav() {
       </Link>
 
       <Link
-        href="/app/create"
+        href="/create"
         className={`flex flex-col items-center justify-center w-16 h-16 transition-colors ${
           isActive('/create') ? 'text-[#5fa4c3]' : 'text-gray-400 hover:text-gray-300'
         }`}
@@ -33,7 +33,7 @@ export default function BottomNav() {
       </Link>
 
       <Link
-        href="/app/profile"
+        href="/profile"
         className={`flex flex-col items-center justify-center w-16 h-16 transition-colors ${
           isActive('/profile') ? 'text-[#5fa4c3]' : 'text-gray-400 hover:text-gray-300'
         }`}
@@ -44,7 +44,7 @@ export default function BottomNav() {
       </Link>
 
       <Link
-        href="/app/messages"
+        href="/message"
         className={`flex flex-col items-center justify-center w-16 h-16 transition-colors ${
           isActive('/messages') ? 'text-[#5fa4c3]' : 'text-gray-400 hover:text-gray-300'
         }`}
@@ -55,7 +55,7 @@ export default function BottomNav() {
       </Link>
 
       <Link
-        href="/app/menu"
+        href="/menu"
         className={`flex flex-col items-center justify-center w-16 h-16 transition-colors ${
           isActive('/menu') ? 'text-[#5fa4c3]' : 'text-gray-400 hover:text-gray-300'
         }`}
