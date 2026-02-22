@@ -115,11 +115,6 @@ export default function MessagesPage() {
         {/* Header */}
         <header className="bg-[#2d3f47] border-b border-[#3a4f5a] p-4 sticky top-0 z-10 flex items-center justify-between">
           <h1 className="text-xl font-bold text-white">Messages</h1>
-          <button className="text-gray-400 hover:text-gray-300">
-            <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" />
-            </svg>
-          </button>
         </header>
 
         {/* Conversations */}
