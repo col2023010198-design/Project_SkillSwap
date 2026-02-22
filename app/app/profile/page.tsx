@@ -6,22 +6,12 @@ import BottomNav from '@/components/BottomNav';
 import PostCard, { Post } from '@/components/PostCard';
 import { fetchProfile, Profile } from '@/lib/profile';
 
-const userPosts: Post[] = [
-  {
-    id: '1',
-    author: {
-      name: 'Ron Hansen Person',
-      avatar: 'RHP',
-      username: 'ronhansen',
-    },
-    rating: 5,
-    title: 'Web Development Expert',
-    description: 'Looking for Web development trainers. I can help you learn JavaScript, React, and Node.js.',
-    timestamp: '2 hours ago',
-    likes: 127,
-    comments: 24,
-  },
-];
+// TODO: Fetch from 'posts' table dynamically
+// For now, posts are hardcoded. Future implementation should:
+// 1. Create a posts table in Supabase (ID, User_ID, Content, Created_At, etc.)
+// 2. Fetch posts using: supabase.from('posts').select('*').eq('user_id', userId)
+// 3. Remove this hardcoded array and replace with dynamic data
+const userPosts: Post[] = [];
 
 /** Renders a single pill-shaped skill tag */
 function SkillTag({ label }: { label: string }) {
@@ -183,9 +173,15 @@ export default function ProfilePage() {
             {/* Posts */}
             <div className="p-4 space-y-4">
               <h3 className="text-lg font-bold text-white">Recent Posts</h3>
-              {userPosts.map((post) => (
-                <PostCard key={post.id} post={post} />
-              ))}
+              {userPosts.length > 0 ? (
+                userPosts.map((post) => (
+                  <PostCard key={post.id} post={post} />
+                ))
+              ) : (
+                <div className="bg-[#2d3f47] rounded-lg p-8 text-center border border-[#3a4f5a]">
+                  <p className="text-gray-400 text-sm">No posts yet</p>
+                </div>
+              )}
             </div>
           </>
         )}

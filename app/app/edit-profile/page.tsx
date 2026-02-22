@@ -1,20 +1,84 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import BottomNav from '@/components/BottomNav';
-import { updateProfile } from '@/lib/profile';
+import { updateProfile, fetchProfile } from '@/lib/profile';
+import { supabase } from '@/lib/supabase';
 
 export default function EditProfilePage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
-    firstName: 'Ron',
-    lastName: 'Hansen Person',
-    username: 'ronhansen',
-    skillsToTeach: 'JavaScript, React, Node.js',
+    firstName: '',
+    lastName: '',
+    username: '',
+    skillsToTeach: '',
   });
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fetching, setFetching] = useState(true);
+
+  // Fetch current profile data on mount
+  useEffect(() => {
+    fetchProfile().then(({ profile, error: fetchError }) => {
+      if (fetchError) {
+        setError(fetchError);
+      } else if (profile) {
+        setFormData({
+          firstName: profile.first_name || '',
+          lastName: profile.last_name || '',
+          username: profile.username || '',
+          skillsToTeach: profile.skills_to_teach?.join(', ') || '',
+        });
+        setCurrentAvatarUrl(profile.avatar_url);
+      }
+      setFetching(false);
+    });
+  }, []);
+
+  // Cleanup preview URL on unmount
+  useEffect(() => {
+    return () => {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      if (!file.type.startsWith('image/')) {
+        setError('Please select an image file');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setError('Image size must be less than 5MB');
+        return;
+      }
+
+      setAvatarFile(file);
+      
+      // Create preview URL
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+      const newPreviewUrl = URL.createObjectURL(file);
+      setPreviewUrl(newPreviewUrl);
+      setError(null);
+    }
+  };
+
+  const handleChangePhotoClick = () => {
+    fileInputRef.current?.click();
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -29,11 +93,56 @@ export default function EditProfilePage() {
     setError(null);
     setLoading(true);
 
+    let avatarUrl = currentAvatarUrl;
+
+    // Upload avatar to Supabase storage if a new file was selected
+    if (avatarFile) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) {
+          setError('Not authenticated');
+          setLoading(false);
+          return;
+        }
+
+        const userId = session.user.id;
+        const fileExt = avatarFile.name.split('.').pop();
+        const fileName = `${userId}/${Date.now()}.${fileExt}`;
+
+        // Upload file to avatars bucket
+        const { error: uploadError } = await supabase.storage
+          .from('avatars')
+          .upload(fileName, avatarFile, {
+            cacheControl: '3600',
+            upsert: false,
+          });
+
+        if (uploadError) {
+          setError(`Upload failed: ${uploadError.message}`);
+          setLoading(false);
+          return;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('avatars')
+          .getPublicUrl(fileName);
+
+        avatarUrl = urlData.publicUrl;
+      } catch (err) {
+        setError('Failed to upload avatar');
+        setLoading(false);
+        return;
+      }
+    }
+
+    // Update profile with avatar URL
     const { error: updateError } = await updateProfile({
       first_name: formData.firstName,
       last_name: formData.lastName,
       username: formData.username,
       skills_to_teach_raw: formData.skillsToTeach,
+      avatar_url: avatarUrl,
     });
 
     setLoading(false);
@@ -59,11 +168,44 @@ export default function EditProfilePage() {
           <h1 className="text-xl font-bold text-white">Edit Profile</h1>
         </header>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        {fetching ? (
+          <div className="flex items-center justify-center py-24">
+            <div className="w-8 h-8 border-4 border-[#5fa4c3] border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          /* Form */
+          <form onSubmit={handleSubmit} className="p-6 space-y-4">
           <div className="text-center mb-6">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#5fa4c3] to-[#4a7a8d] mx-auto mb-4" />
-            <button type="button" className="text-[#5fa4c3] text-sm font-medium hover:underline">
+            {/* Avatar Preview */}
+            {previewUrl || currentAvatarUrl ? (
+              <img
+                src={previewUrl || currentAvatarUrl || ''}
+                alt="Profile"
+                className="w-20 h-20 rounded-full object-cover mx-auto mb-4"
+              />
+            ) : (
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-[#5fa4c3] to-[#4a7a8d] mx-auto mb-4 flex items-center justify-center text-white font-bold text-lg">
+                {formData.firstName && formData.lastName
+                  ? `${formData.firstName[0]}${formData.lastName[0]}`.toUpperCase()
+                  : 'U'}
+              </div>
+            )}
+            
+            {/* Hidden File Input */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              id="avatar-input"
+              accept="image/*"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            
+            <button
+              type="button"
+              onClick={handleChangePhotoClick}
+              className="text-[#5fa4c3] text-sm font-medium hover:underline"
+            >
               Change Photo
             </button>
           </div>
@@ -129,6 +271,7 @@ export default function EditProfilePage() {
             </button>
           </div>
         </form>
+        )}
       </div>
 
       <BottomNav />

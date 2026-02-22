@@ -30,6 +30,7 @@ export interface UpdateProfileInput {
   last_name: string
   username: string
   skills_to_teach_raw?: string
+  avatar_url?: string | null
 }
 
 export interface ProfileUpdateResult {
@@ -128,6 +129,7 @@ export async function updateProfile(
     skills_to_teach: skills_to_teach,
     role,
     updated_at: new Date().toISOString(),
+    ...(input.avatar_url !== undefined && { avatar_url: input.avatar_url }),
   }
 
   // 5. Upsert — inserts on first save, updates on subsequent saves
