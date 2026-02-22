@@ -13,6 +13,7 @@ export interface Profile {
   username: string | null
   avatar_url: string | null
   role: 'student' | 'professional' | null
+  bio: string | null
   is_verified: boolean
   posts_count: number
   rating: number
@@ -127,6 +128,7 @@ export async function updateProfile(
     username: input.username.trim().toLowerCase(),
     skills_to_teach: skills_to_teach,
     role,
+    bio: input ?? '', // Placeholder - can be extended to accept bio input in the future
     updated_at: new Date().toISOString(),
     ...(input.avatar_url !== undefined && { avatar_url: input.avatar_url }),
   }
@@ -186,6 +188,7 @@ export async function fetchProfile(): Promise<FetchProfileResult> {
        username,
        avatar_url,
        role,
+       bio,
        is_verified,
        posts_count,
        rating,
