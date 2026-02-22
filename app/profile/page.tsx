@@ -134,7 +134,13 @@ export default function ProfilePage() {
 
                   {/* Bio */}
                 {profile?.bio && (
-                  <p className="text-center text-gray-400 mt-4 px-4">{profile.bio}</p>
+                  <p className="text-center mt-4 px-4">
+                    {profile?.bio?.trim() ? (
+                      <span className="text-gray-400">{profile.bio}</span>
+                    ) : (
+                      <span className="text-gray-500 italic">No Bio</span>
+                    )}
+                  </p>
                 )}
 
                   {/* Edit Profile Button */}
