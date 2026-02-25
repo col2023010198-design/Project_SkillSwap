@@ -6,26 +6,6 @@ import { createClient } from '@supabase/supabase-js';
 import BottomNav from '@/components/BottomNav';
 import PostCard, { Post } from '@/components/PostCard';
 
-type PostRow = {
-  id: string;
-  user_id: string;
-  title: string;
-  description: string;
-  skill_to_teach: string;
-  skill_to_learn: string;
-  created_at: string;
-
-  profiles: {
-    username: string | null;
-    first_name: string | null;
-    last_name: string | null;
-    avatar_url: string | null;
-  } | null;
-
-  post_likes: { count: number }[];
-  post_comments: { count: number }[];
-};
-
 function timeAgo(iso: string) {
   const d = new Date(iso);
   const diff = Date.now() - d.getTime();
@@ -39,10 +19,33 @@ function timeAgo(iso: string) {
   return `${day}d ago`;
 }
 
+type PostRow = {
+  id: string;
+  user_id: string;
+  title: string;
+  description: string;
+  skill_to_teach: string;
+  skill_to_learn: string;
+  created_at: string;
+  profiles: {
+    username: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    avatar_url: string | null;
+  } | null;
+};
+
 export default function HomePage() {
   const supabase = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!url || !key) {
+      throw new Error(
+        'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY. Check .env.local and restart dev server.'
+      );
+    }
+
     return createClient(url, key);
   }, []);
 
@@ -53,7 +56,8 @@ export default function HomePage() {
   const loadFeed = useCallback(async () => {
     setErr(null);
 
-    const { data, error } = await supabase
+    // 1) Fetch posts + profile
+    const { data: postData, error: postErr } = await supabase
       .from('skill_swap_posts')
       .select(
         `
@@ -64,26 +68,67 @@ export default function HomePage() {
         skill_to_teach,
         skill_to_learn,
         created_at,
-        profiles ( username, full_name, avatar_url ),
-        post_likes ( count ),
-        post_comments ( count )
+        profiles ( username, first_name, last_name, avatar_url )
       `
       )
       .order('created_at', { ascending: false })
       .limit(50);
 
-    if (error) {
-      setErr(error.message);
+    if (postErr) {
+      setErr(postErr.message);
       return;
     }
 
-    const mapped: Post[] = ((data ?? []) as unknown as PostRow[]).map((r) => {
-      const name = r.profiles?.first_name && r.profiles?.last_name
-        ? `${r.profiles.first_name} ${r.profiles.last_name}`
-        : r.profiles?.username ?? 'Unknown';
-      const username = r.profiles?.username ?? 'unknown';
-      const likes = r.post_likes?.[0]?.count ?? 0;
-      const comments = r.post_comments?.[0]?.count ?? 0;
+    const postsRows = (postData ?? []) as unknown as PostRow[];
+    const postIds = postsRows.map((p) => p.id);
+
+    if (postIds.length === 0) {
+      setPosts([]);
+      return;
+    }
+
+    // 2) Fetch likes rows for these posts, then count in JS
+    const { data: likesRows, error: likesErr } = await supabase
+      .from('post_likes')
+      .select('post_id')
+      .in('post_id', postIds);
+
+    if (likesErr) {
+      setErr(likesErr.message);
+      return;
+    }
+
+    const likeCountMap = new Map<string, number>();
+    for (const row of likesRows ?? []) {
+      const pid = (row as any).post_id as string;
+      likeCountMap.set(pid, (likeCountMap.get(pid) ?? 0) + 1);
+    }
+
+    // 3) Fetch comment rows for these posts, then count in JS
+    const { data: commentRows, error: comErr } = await supabase
+      .from('post_comments')
+      .select('post_id')
+      .in('post_id', postIds);
+
+    if (comErr) {
+      setErr(comErr.message);
+      return;
+    }
+
+    const commentCountMap = new Map<string, number>();
+    for (const row of commentRows ?? []) {
+      const pid = (row as any).post_id as string;
+      commentCountMap.set(pid, (commentCountMap.get(pid) ?? 0) + 1);
+    }
+
+    // 4) Map to PostCard’s Post type
+    const mapped: Post[] = postsRows.map((r) => {
+      const name =
+        r.profiles?.first_name || r.profiles?.last_name
+          ? `${r.profiles?.first_name ?? ''} ${r.profiles?.last_name ?? ''}`.trim()
+          : r.profiles?.username ?? 'Unknown';
+
+        const username = r.profiles?.username ?? 'unknown';
 
       return {
         id: r.id,
@@ -102,8 +147,8 @@ export default function HomePage() {
         title: r.title,
         description: r.description,
         timestamp: timeAgo(r.created_at),
-        likes,
-        comments,
+        likes: likeCountMap.get(r.id) ?? 0,
+        comments: commentCountMap.get(r.id) ?? 0,
       };
     });
 

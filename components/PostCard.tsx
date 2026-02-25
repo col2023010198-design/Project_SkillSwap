@@ -6,7 +6,8 @@ import { createClient } from '@supabase/supabase-js';
 export interface Post {
   id: string;
   author: {
-    name: string;
+    first_name: string;
+    last_name: string;
     avatar: string;
     username: string;
   };
@@ -25,7 +26,8 @@ type CommentRow = {
   user_id: string;
   profiles?: {
     username: string | null;
-    full_name: string | null;
+    first_name: string | null;
+    last_name: string | null;
     avatar_url: string | null;
   } | null;
 };
@@ -111,7 +113,8 @@ export default function PostCard({ post }: { post: Post }) {
         user_id,
         profiles:profiles!post_comments_user_id_fkey (
           username,
-          full_name,
+          first_name,
+          last_name,
           avatar_url
         )
       `
@@ -260,7 +263,7 @@ export default function PostCard({ post }: { post: Post }) {
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5fa4c3] to-[#4a7a8d] flex-shrink-0" />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-white truncate">{post.author.name}</h3>
+              <h3 className="font-semibold text-white truncate">{post.author.first_name} {post.author.last_name}</h3>
               <div className="flex items-center gap-0.5">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <span
@@ -326,7 +329,7 @@ export default function PostCard({ post }: { post: Post }) {
               <div className="min-w-0">
                 <div className="text-white font-semibold truncate">{post.title}</div>
                 <div className="text-xs text-gray-400 truncate">
-                  {post.author.name} · @{post.author.username}
+                  {post.author.first_name} {post.author.last_name} · @{post.author.username}
                 </div>
               </div>
               <button
@@ -353,7 +356,9 @@ export default function PostCard({ post }: { post: Post }) {
                   <div className="text-sm text-white/60">No comments yet.</div>
                 ) : (
                   comments.map((c) => {
-                    const name = c.profiles?.full_name ?? c.profiles?.username ?? 'Unknown';
+                    const name = c.profiles?.first_name && c.profiles?.last_name
+                      ? `${c.profiles.first_name} ${c.profiles.last_name}`
+                      : c.profiles?.username ?? 'Unknown';
                     const uname = c.profiles?.username ?? 'unknown';
                     return (
                       <div key={c.id} className="bg-[#2d3f47] border border-[#3a4f5a] rounded-lg p-3">
