@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 
 export interface Post {
   id: string;
+  user_id: string; // ✅ needed to check ownership
   author: {
     first_name: string;
     last_name: string;
@@ -63,7 +64,13 @@ function initialsFromName(name: string) {
   );
 }
 
-export default function PostCard({ post }: { post: Post }) {
+export default function PostCard({
+  post,
+  onDeletePost,
+}: {
+  post: Post;
+  onDeletePost: (postId: string) => Promise<void> | void;
+}) {
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -79,6 +86,8 @@ export default function PostCard({ post }: { post: Post }) {
     `${post.author.first_name} ${post.author.last_name}`.trim() || post.author.username || 'Unknown';
 
   const [open, setOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
   const [me, setMe] = useState<string | null>(null);
 
   const [comments, setComments] = useState<CommentRow[]>([]);
@@ -92,35 +101,35 @@ export default function PostCard({ post }: { post: Post }) {
   useEffect(() => setLikesLocal(post.likes), [post.likes]);
   useEffect(() => setCommentsLocal(post.comments), [post.comments]);
 
+  // Load current user id once (needed for owner-only delete)
   useEffect(() => {
-    if (!open) return;
     let active = true;
-
     (async () => {
-      setActionError(null);
       const { data, error } = await supabase.auth.getUser();
       if (!active) return;
-
-      if (error) {
-        setActionError(error.message);
-        setMe(null);
-        return;
-      }
-
-      setMe(data.user?.id ?? null);
+      if (error) setMe(null);
+      else setMe(data.user?.id ?? null);
     })();
-
     return () => {
       active = false;
     };
-  }, [open, supabase]);
+  }, [supabase]);
 
-  // ✅ FINAL: load comments, then load profiles, then merge (NO nested join)
+  // close menu on outside click
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onDoc = () => setMenuOpen(false);
+    document.addEventListener('click', onDoc);
+    return () => document.removeEventListener('click', onDoc);
+  }, [menuOpen]);
+
+  const isOwner = !!me && me === post.user_id;
+
+  // Comments loader (2-step: comments -> profiles)
   const loadComments = async () => {
     setLoadingComments(true);
     setActionError(null);
 
-    // 1) comments
     const { data: cData, error: cErr } = await supabase
       .from('post_comments')
       .select('id, content, created_at, user_id')
@@ -148,7 +157,6 @@ export default function PostCard({ post }: { post: Post }) {
 
     const userIds = Array.from(new Set(commentsRaw.map((c) => c.user_id)));
 
-    // 2) profiles for those commenters
     const { data: pData, error: pErr } = await supabase
       .from('profiles')
       .select('id, username, first_name, last_name, avatar_url')
@@ -165,7 +173,6 @@ export default function PostCard({ post }: { post: Post }) {
       profileMap.set(pr.id, pr);
     }
 
-    // 3) merge
     const merged: CommentRow[] = commentsRaw.map((c) => ({
       ...c,
       profiles: profileMap.get(c.user_id) ?? null,
@@ -180,7 +187,6 @@ export default function PostCard({ post }: { post: Post }) {
 
     loadComments();
 
-    // realtime updates for this post's comments
     const channel = supabase
       .channel(`comments:${post.id}`)
       .on(
@@ -271,7 +277,6 @@ export default function PostCard({ post }: { post: Post }) {
 
     setCommentText('');
     setCommentsLocal((n) => n + 1);
-    // list refreshes via realtime
   };
 
   const deleteComment = async (commentId: string) => {
@@ -285,7 +290,6 @@ export default function PostCard({ post }: { post: Post }) {
     }
 
     setCommentsLocal((n) => Math.max(0, n - 1));
-    // list refreshes via realtime
   };
 
   return (
@@ -322,9 +326,44 @@ export default function PostCard({ post }: { post: Post }) {
             <p className="text-xs text-gray-400">@{post.author.username}</p>
           </div>
 
-          <button className="text-gray-400 hover:text-gray-300" onClick={(e) => e.stopPropagation()}>
-            ⋮
-          </button>
+          {/* ⋮ menu (owner can delete) */}
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              className="text-gray-400 hover:text-gray-300"
+              onClick={() => setMenuOpen((v) => !v)}
+              aria-label="Post menu"
+            >
+              ⋮
+            </button>
+
+            {menuOpen && (
+              <div className="absolute right-0 mt-2 w-40 rounded-lg border border-[#3a4f5a] bg-[#1a2c36] shadow-lg z-20 overflow-hidden">
+                <button
+                  className="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-white/5"
+                  onClick={() => {
+                    setMenuOpen(false);
+                    setOpen(true);
+                  }}
+                >
+                  Open
+                </button>
+
+                {isOwner && (
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
+                    onClick={async () => {
+                      setMenuOpen(false);
+                      if (confirm('Delete this post?')) {
+                        await onDeletePost(post.id);
+                      }
+                    }}
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         <h4 className="font-medium text-white mb-2">{post.title}</h4>

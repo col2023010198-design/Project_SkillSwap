@@ -41,12 +41,7 @@ export default function HomePage() {
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (!url || !key) {
-      throw new Error(
-        'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY. Check .env.local and restart dev server.'
-      );
-    }
+    if (!url || !key) throw new Error('Missing Supabase env vars');
     return createClient(url, key);
   }, []);
 
@@ -54,10 +49,25 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
 
+  const deletePost = useCallback(
+    async (postId: string) => {
+      setErr(null);
+
+      const { error } = await supabase.from('skill_swap_posts').delete().eq('id', postId);
+      if (error) {
+        setErr(error.message);
+        return;
+      }
+
+      // instant UI removal
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+    },
+    [supabase]
+  );
+
   const loadFeed = useCallback(async () => {
     setErr(null);
 
-    // 1) Posts
     const { data: postData, error: postErr } = await supabase
       .from('skill_swap_posts')
       .select('id,user_id,title,description,skill_to_teach,skill_to_learn,created_at')
@@ -75,7 +85,6 @@ export default function HomePage() {
       return;
     }
 
-    // 2) Profiles for those users
     const userIds = Array.from(new Set(postsRows.map((p) => p.user_id)));
 
     const { data: profData, error: profErr } = await supabase
@@ -93,8 +102,8 @@ export default function HomePage() {
       profileMap.set(pr.id, pr);
     }
 
-    // 3) Likes counts
     const postIds = postsRows.map((p) => p.id);
+
     const { data: likesRows, error: likesErr } = await supabase
       .from('post_likes')
       .select('post_id')
@@ -111,7 +120,6 @@ export default function HomePage() {
       likeCountMap.set(pid, (likeCountMap.get(pid) ?? 0) + 1);
     }
 
-    // 4) Comments counts
     const { data: commentRows, error: comErr } = await supabase
       .from('post_comments')
       .select('post_id')
@@ -128,15 +136,14 @@ export default function HomePage() {
       commentCountMap.set(pid, (commentCountMap.get(pid) ?? 0) + 1);
     }
 
-    // 5) Map to PostCard’s Post type
     const mapped: Post[] = postsRows.map((r) => {
       const pr = profileMap.get(r.user_id);
 
       const first = pr?.first_name ?? '';
       const last = pr?.last_name ?? '';
       const username = pr?.username ?? 'unknown';
-
       const displayName = `${first} ${last}`.trim() || username || 'Unknown';
+
       const avatar =
         displayName
           .split(' ')
@@ -147,6 +154,7 @@ export default function HomePage() {
 
       return {
         id: r.id,
+        user_id: r.user_id, // ✅ important for owner check
         author: {
           first_name: first || (!last ? 'Unknown' : ''),
           last_name: last,
@@ -206,7 +214,7 @@ export default function HomePage() {
           ) : posts.length === 0 ? (
             <div className="text-white/70 text-sm">No posts yet.</div>
           ) : (
-            posts.map((p) => <PostCard key={p.id} post={p} />)
+            posts.map((p) => <PostCard key={p.id} post={p} onDeletePost={deletePost} />)
           )}
         </div>
       </div>
