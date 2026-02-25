@@ -159,19 +159,85 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {loading ? (
-            <div className="text-white/70 text-sm">Loading…</div>
-          ) : posts.length > 0 ? (
-            posts.map((post) => (
-              <PostCard
-                key={post.id}
-                post={post}
-                onDeletePost={deletePost} // ✅ now works here
-              />
-            ))
-          ) : (
-            <div className="bg-[#2d3f47] rounded-lg p-8 text-center border border-[#3a4f5a] text-white/70">
-              No posts yet.
+                {/* Name, username, badge */}
+                <div className="text-center space-y-1">
+                  <div className="flex items-center justify-center gap-2 flex-wrap">
+                    <h2 className="text-2xl font-bold text-white">{fullName}</h2>
+                    {profile?.is_verified && <VerifiedBadge />}
+                  </div>
+                  {profile?.username && (
+                    <p className="text-gray-400">@{profile.username}</p>
+                  )}
+                  {profile?.role && (
+                    <p className="text-xs text-[#5fa4c3] capitalize font-medium">
+                      {profile.role}
+                    </p>
+                  )}
+                  {profile?.bio ? (
+                    <p className="text-gray-300 text-sm leading-relaxed mt-1">{profile.bio}</p>
+                  ) : (
+                    <p className="text-xs text-gray-500 italic mt-1">No bio yet</p>
+                  )}
+                </div>
+
+                {/* Stats */}
+                <div className="flex gap-8 w-full justify-center pt-4 border-t border-[#3a4f5a]">
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-[#5fa4c3]">
+                      {profile?.rating != null
+                        ? Number(profile.rating).toFixed(1)
+                        : '0.0'}
+                    </p>
+                    <p className="text-xs text-gray-400">Rating</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-[#5fa4c3]">
+                      {profile?.posts_count ?? 0}
+                    </p>
+                    <p className="text-xs text-gray-400">Posts</p>
+                  </div>
+                </div>
+
+                  {/* Edit Profile Button */}
+                <Link
+                  href="/app/edit-profile"
+                  className="w-full px-4 py-2 bg-[#5fa4c3] text-white rounded-full font-medium hover:bg-[#4a8fb5] transition-colors text-center"
+                >
+                  Edit Profile
+                </Link>
+              </div>
+            </div>
+
+            {/* Skills Section */}
+            <div className="p-6 border-b border-[#3a4f5a]">
+              <h3 className="text-lg font-bold text-white mb-4">Skills</h3>
+              <div className="space-y-4">
+                <div className="bg-[#2d3f47] rounded-lg p-3 border border-[#3a4f5a]">
+                  {profile?.skills_to_teach?.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {profile.skills_to_teach.map((skill) => (
+                        <SkillTag key={skill} label={skill} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 italic">No skills added yet</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Posts */}
+            <div className="p-4 space-y-4">
+              <h3 className="text-lg font-bold text-white">Recent Posts</h3>
+              {userPosts.length > 0 ? (
+                userPosts.map((post) => (
+                  <PostCard key={post.id} post={post} />
+                ))
+              ) : (
+                <div className="bg-[#2d3f47] rounded-lg p-8 text-center border border-[#3a4f5a]">
+                  <p className="text-gray-400 text-sm">No posts yet</p>
+                </div>
+              )}
             </div>
           )}
         </div>
