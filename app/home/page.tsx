@@ -146,20 +146,23 @@ export default function HomePage() {
 
       const avatar =
         displayName
-          .split(' ')
-          .filter(Boolean)
+          .trim()
+          .split(/\s+/)
           .slice(0, 2)
-          .map((s) => s[0]?.toUpperCase())
+          .map((w) => w.charAt(0).toUpperCase())
           .join('') || 'U';
+
+      const avatarUrl = pr?.avatar_url ?? null;
 
       return {
         id: r.id,
-        user_id: r.user_id, // ✅ important for owner check
+        user_id: r.user_id,
         author: {
           first_name: first || (!last ? 'Unknown' : ''),
           last_name: last,
           username,
           avatar,
+          avatar_url: avatarUrl,
         },
         rating: 5,
         title: r.title,

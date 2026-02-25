@@ -5,12 +5,13 @@ import { createClient } from '@supabase/supabase-js';
 
 export interface Post {
   id: string;
-  user_id: string; // ✅ needed to check ownership
+  user_id: string;
   author: {
     first_name: string;
     last_name: string;
-    avatar: string; // initials fallback
     username: string;
+    avatar: string; // initials fallback
+    avatar_url?: string | null; // ✅ actual image URL
   };
   rating: number;
   title: string;
@@ -59,7 +60,7 @@ function initialsFromName(name: string) {
   return (
     parts
       .slice(0, 2)
-      .map((p) => p[0]?.toUpperCase())
+      .map((p) => p.charAt(0).toUpperCase())
       .join('') || 'U'
   );
 }
@@ -69,7 +70,7 @@ export default function PostCard({
   onDeletePost,
 }: {
   post: Post;
-  onDeletePost?: (postId: string) => Promise<void> | void;
+  onDeletePost?: (postId: string) => Promise<void> | void; // ✅ optional so profile page won't break
 }) {
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -87,7 +88,6 @@ export default function PostCard({
 
   const [open, setOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-
   const [me, setMe] = useState<string | null>(null);
 
   const [comments, setComments] = useState<CommentRow[]>([]);
@@ -101,7 +101,7 @@ export default function PostCard({
   useEffect(() => setLikesLocal(post.likes), [post.likes]);
   useEffect(() => setCommentsLocal(post.comments), [post.comments]);
 
-  // Load current user id once (needed for owner-only delete)
+  // current user id (for delete own post/comment)
   useEffect(() => {
     let active = true;
     (async () => {
@@ -125,7 +125,7 @@ export default function PostCard({
 
   const isOwner = !!me && me === post.user_id;
 
-  // Comments loader (2-step: comments -> profiles)
+  // comments loader: 2-step fetch (comments -> profiles), avoids schema-cache relationship issues
   const loadComments = async () => {
     setLoadingComments(true);
     setActionError(null);
@@ -182,6 +182,7 @@ export default function PostCard({
     setLoadingComments(false);
   };
 
+  // load + realtime (when modal open)
   useEffect(() => {
     if (!open) return;
 
@@ -305,8 +306,18 @@ export default function PostCard({
         className="bg-[#2d3f47] rounded-lg p-4 border border-[#3a4f5a] hover:border-[#5fa4c3] transition-colors cursor-pointer"
       >
         <div className="flex items-start gap-3 mb-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5fa4c3] to-[#4a7a8d] flex-shrink-0 flex items-center justify-center text-white font-semibold">
-            {post.author.avatar || initialsFromName(displayName)}
+          {/* ✅ Avatar supports avatar_url */}
+          <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-[#5fa4c3] to-[#4a7a8d] flex-shrink-0 flex items-center justify-center text-white font-semibold">
+            {post.author.avatar_url ? (
+              <img
+                src={post.author.avatar_url}
+                alt={displayName}
+                className="w-full h-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <span>{post.author.avatar || initialsFromName(displayName)}</span>
+            )}
           </div>
 
           <div className="flex-1 min-w-0">
@@ -326,7 +337,7 @@ export default function PostCard({
             <p className="text-xs text-gray-400">@{post.author.username}</p>
           </div>
 
-          {/* ⋮ menu (owner can delete) */}
+          {/* ⋮ menu */}
           <div className="relative" onClick={(e) => e.stopPropagation()}>
             <button
               className="text-gray-400 hover:text-gray-300"
@@ -349,18 +360,18 @@ export default function PostCard({
                 </button>
 
                 {isOwner && onDeletePost && (
-                <button
-                  className="w-full text-left px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
-                  onClick={async () => {
-                    setMenuOpen(false);
-                    if (confirm('Delete this post?')) {
-                      await onDeletePost(post.id);
-                    }
-                  }}
-                >
-                  Delete
-                </button>
-              )}
+                  <button
+                    className="w-full text-left px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
+                    onClick={async () => {
+                      setMenuOpen(false);
+                      if (confirm('Delete this post?')) {
+                        await onDeletePost(post.id);
+                      }
+                    }}
+                  >
+                    Delete
+                  </button>
+                )}
               </div>
             )}
           </div>
