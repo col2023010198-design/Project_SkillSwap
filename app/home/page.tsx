@@ -27,12 +27,14 @@ type PostRow = {
   skill_to_teach: string;
   skill_to_learn: string;
   created_at: string;
-  profiles: {
-    username: string | null;
-    first_name: string | null;
-    last_name: string | null;
-    avatar_url: string | null;
-  } | null;
+};
+
+type ProfileRow = {
+  id: string;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
 };
 
 export default function HomePage() {
@@ -45,7 +47,6 @@ export default function HomePage() {
         'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY. Check .env.local and restart dev server.'
       );
     }
-
     return createClient(url, key);
   }, []);
 
@@ -56,21 +57,10 @@ export default function HomePage() {
   const loadFeed = useCallback(async () => {
     setErr(null);
 
-    // 1) Fetch posts + profile
+    // 1) Posts
     const { data: postData, error: postErr } = await supabase
       .from('skill_swap_posts')
-      .select(
-        `
-        id,
-        user_id,
-        title,
-        description,
-        skill_to_teach,
-        skill_to_learn,
-        created_at,
-        profiles ( username, first_name, last_name, avatar_url )
-      `
-      )
+      .select('id,user_id,title,description,skill_to_teach,skill_to_learn,created_at')
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -80,14 +70,31 @@ export default function HomePage() {
     }
 
     const postsRows = (postData ?? []) as unknown as PostRow[];
-    const postIds = postsRows.map((p) => p.id);
-
-    if (postIds.length === 0) {
+    if (postsRows.length === 0) {
       setPosts([]);
       return;
     }
 
-    // 2) Fetch likes rows for these posts, then count in JS
+    // 2) Profiles for those users
+    const userIds = Array.from(new Set(postsRows.map((p) => p.user_id)));
+
+    const { data: profData, error: profErr } = await supabase
+      .from('profiles')
+      .select('id,username,first_name,last_name,avatar_url')
+      .in('id', userIds);
+
+    if (profErr) {
+      setErr(profErr.message);
+      return;
+    }
+
+    const profileMap = new Map<string, ProfileRow>();
+    for (const pr of (profData ?? []) as unknown as ProfileRow[]) {
+      profileMap.set(pr.id, pr);
+    }
+
+    // 3) Likes counts
+    const postIds = postsRows.map((p) => p.id);
     const { data: likesRows, error: likesErr } = await supabase
       .from('post_likes')
       .select('post_id')
@@ -104,7 +111,7 @@ export default function HomePage() {
       likeCountMap.set(pid, (likeCountMap.get(pid) ?? 0) + 1);
     }
 
-    // 3) Fetch comment rows for these posts, then count in JS
+    // 4) Comments counts
     const { data: commentRows, error: comErr } = await supabase
       .from('post_comments')
       .select('post_id')
@@ -121,30 +128,30 @@ export default function HomePage() {
       commentCountMap.set(pid, (commentCountMap.get(pid) ?? 0) + 1);
     }
 
-    // 4) Map to PostCard’s Post type (author requires first_name + last_name)
+    // 5) Map to PostCard’s Post type
     const mapped: Post[] = postsRows.map((r) => {
-      const first = r.profiles?.first_name ?? '';
-      const last = r.profiles?.last_name ?? '';
+      const pr = profileMap.get(r.user_id);
 
-      // optional fallback if both empty
-      const safeFirst = first || (!last ? 'Unknown' : '');
-      const safeLast = last;
+      const first = pr?.first_name ?? '';
+      const last = pr?.last_name ?? '';
+      const username = pr?.username ?? 'unknown';
 
-      const displayName = `${safeFirst} ${safeLast}`.trim() || r.profiles?.username || 'Unknown';
+      const displayName = `${first} ${last}`.trim() || username || 'Unknown';
+      const avatar =
+        displayName
+          .split(' ')
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((s) => s[0]?.toUpperCase())
+          .join('') || 'U';
 
       return {
         id: r.id,
         author: {
-          first_name: safeFirst,
-          last_name: safeLast,
-          username: r.profiles?.username ?? 'unknown',
-          avatar:
-            displayName
-              .split(' ')
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((s) => s[0]?.toUpperCase())
-              .join('') || 'U',
+          first_name: first || (!last ? 'Unknown' : ''),
+          last_name: last,
+          username,
+          avatar,
         },
         rating: 5,
         title: r.title,
@@ -167,7 +174,6 @@ export default function HomePage() {
       if (alive) setLoading(false);
     })();
 
-    // Realtime refresh
     const channel = supabase
       .channel('feed-rt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'skill_swap_posts' }, () => loadFeed())
