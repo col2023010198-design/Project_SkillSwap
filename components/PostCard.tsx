@@ -8,7 +8,7 @@ export interface Post {
   author: {
     first_name: string;
     last_name: string;
-    avatar: string;
+    avatar: string;   // initials fallback (or you can wire avatar_url later)
     username: string;
   };
   rating: number;
@@ -45,20 +45,32 @@ function timeAgo(iso: string) {
   return `${day}d ago`;
 }
 
+function initialsFromName(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return (
+    parts
+      .slice(0, 2)
+      .map((p) => p[0]?.toUpperCase())
+      .join('') || 'U'
+  );
+}
+
 export default function PostCard({ post }: { post: Post }) {
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!url || !key) {
-      // Make the error obvious instead of failing in weird ways
       throw new Error(
-        'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY. Check your .env.local and restart dev server.'
+        'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY. Check .env.local and restart dev server.'
       );
     }
 
     return createClient(url, key);
   }, []);
+
+  const displayName =
+    `${post.author.first_name} ${post.author.last_name}`.trim() || post.author.username || 'Unknown';
 
   const [open, setOpen] = useState(false);
   const [me, setMe] = useState<string | null>(null);
@@ -76,7 +88,6 @@ export default function PostCard({ post }: { post: Post }) {
 
   useEffect(() => {
     if (!open) return;
-
     let active = true;
 
     (async () => {
@@ -102,7 +113,7 @@ export default function PostCard({ post }: { post: Post }) {
     setLoadingComments(true);
     setActionError(null);
 
-    // ✅ IMPORTANT FIX: explicit FK join to profiles
+    // If your FK name differs, change `post_comments_user_id_fkey`
     const { data, error } = await supabase
       .from('post_comments')
       .select(
@@ -137,17 +148,11 @@ export default function PostCard({ post }: { post: Post }) {
 
     loadComments();
 
-    // realtime updates for this post's comments
     const channel = supabase
       .channel(`comments:${post.id}`)
       .on(
         'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'post_comments',
-          filter: `post_id=eq.${post.id}`,
-        },
+        { event: '*', schema: 'public', table: 'post_comments', filter: `post_id=eq.${post.id}` },
         () => loadComments()
       )
       .subscribe();
@@ -194,9 +199,10 @@ export default function PostCard({ post }: { post: Post }) {
       if (delErr) setActionError(delErr.message);
       else setLikesLocal((n) => Math.max(0, n - 1));
     } else {
-      const { error: insErr } = await supabase
-        .from('post_likes')
-        .insert({ post_id: post.id, user_id: user.id });
+      const { error: insErr } = await supabase.from('post_likes').insert({
+        post_id: post.id,
+        user_id: user.id,
+      });
 
       if (insErr) setActionError(insErr.message);
       else setLikesLocal((n) => n + 1);
@@ -219,9 +225,11 @@ export default function PostCard({ post }: { post: Post }) {
       return;
     }
 
-    const { error } = await supabase
-      .from('post_comments')
-      .insert({ post_id: post.id, user_id: user.id, content: clean });
+    const { error } = await supabase.from('post_comments').insert({
+      post_id: post.id,
+      user_id: user.id,
+      content: clean,
+    });
 
     if (error) {
       setActionError(error.message);
@@ -230,7 +238,6 @@ export default function PostCard({ post }: { post: Post }) {
 
     setCommentText('');
     setCommentsLocal((n) => n + 1);
-    // list refreshes via realtime
   };
 
   const deleteComment = async (commentId: string) => {
@@ -244,7 +251,6 @@ export default function PostCard({ post }: { post: Post }) {
     }
 
     setCommentsLocal((n) => Math.max(0, n - 1));
-    // list refreshes via realtime
   };
 
   return (
@@ -260,10 +266,13 @@ export default function PostCard({ post }: { post: Post }) {
         className="bg-[#2d3f47] rounded-lg p-4 border border-[#3a4f5a] hover:border-[#5fa4c3] transition-colors cursor-pointer"
       >
         <div className="flex items-start gap-3 mb-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5fa4c3] to-[#4a7a8d] flex-shrink-0" />
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#5fa4c3] to-[#4a7a8d] flex-shrink-0 flex items-center justify-center text-white font-semibold">
+            {post.author.avatar || initialsFromName(displayName)}
+          </div>
+
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-white truncate">{post.author.first_name} {post.author.last_name}</h3>
+              <h3 className="font-semibold text-white truncate">{displayName}</h3>
               <div className="flex items-center gap-0.5">
                 {Array.from({ length: 5 }).map((_, i) => (
                   <span
@@ -296,6 +305,7 @@ export default function PostCard({ post }: { post: Post }) {
             >
               ❤️ {likesLocal}
             </button>
+
             <button
               className="hover:text-[#5fa4c3] transition-colors flex items-center gap-1"
               onClick={(e) => {
@@ -329,7 +339,7 @@ export default function PostCard({ post }: { post: Post }) {
               <div className="min-w-0">
                 <div className="text-white font-semibold truncate">{post.title}</div>
                 <div className="text-xs text-gray-400 truncate">
-                  {post.author.first_name} {post.author.last_name} · @{post.author.username}
+                  {displayName} · @{post.author.username}
                 </div>
               </div>
               <button
@@ -356,17 +366,20 @@ export default function PostCard({ post }: { post: Post }) {
                   <div className="text-sm text-white/60">No comments yet.</div>
                 ) : (
                   comments.map((c) => {
-                    const name = c.profiles?.first_name && c.profiles?.last_name
-                      ? `${c.profiles.first_name} ${c.profiles.last_name}`
-                      : c.profiles?.username ?? 'Unknown';
-                    const uname = c.profiles?.username ?? 'unknown';
+                    const cName =
+                      `${c.profiles?.first_name ?? ''} ${c.profiles?.last_name ?? ''}`.trim() ||
+                      c.profiles?.username ||
+                      'Unknown';
+
+                    const cUser = c.profiles?.username ?? 'unknown';
+
                     return (
                       <div key={c.id} className="bg-[#2d3f47] border border-[#3a4f5a] rounded-lg p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="text-sm text-white truncate">{name}</div>
+                            <div className="text-sm text-white truncate">{cName}</div>
                             <div className="text-xs text-gray-400 truncate">
-                              @{uname} · {timeAgo(c.created_at)}
+                              @{cUser} · {timeAgo(c.created_at)}
                             </div>
                           </div>
 

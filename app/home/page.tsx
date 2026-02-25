@@ -121,22 +121,25 @@ export default function HomePage() {
       commentCountMap.set(pid, (commentCountMap.get(pid) ?? 0) + 1);
     }
 
-    // 4) Map to PostCard’s Post type
+    // 4) Map to PostCard’s Post type (author requires first_name + last_name)
     const mapped: Post[] = postsRows.map((r) => {
-      const name =
-        r.profiles?.first_name || r.profiles?.last_name
-          ? `${r.profiles?.first_name ?? ''} ${r.profiles?.last_name ?? ''}`.trim()
-          : r.profiles?.username ?? 'Unknown';
+      const first = r.profiles?.first_name ?? '';
+      const last = r.profiles?.last_name ?? '';
 
-        const username = r.profiles?.username ?? 'unknown';
+      // optional fallback if both empty
+      const safeFirst = first || (!last ? 'Unknown' : '');
+      const safeLast = last;
+
+      const displayName = `${safeFirst} ${safeLast}`.trim() || r.profiles?.username || 'Unknown';
 
       return {
         id: r.id,
         author: {
-          name,
-          username,
+          first_name: safeFirst,
+          last_name: safeLast,
+          username: r.profiles?.username ?? 'unknown',
           avatar:
-            name
+            displayName
               .split(' ')
               .filter(Boolean)
               .slice(0, 2)
