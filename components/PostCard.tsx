@@ -69,7 +69,7 @@ export default function PostCard({
   onDeletePost,
 }: {
   post: Post;
-  onDeletePost: (postId: string) => Promise<void> | void;
+  onDeletePost?: (postId: string) => Promise<void> | void;
 }) {
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -348,19 +348,19 @@ export default function PostCard({
                   Open
                 </button>
 
-                {isOwner && (
-                  <button
-                    className="w-full text-left px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
-                    onClick={async () => {
-                      setMenuOpen(false);
-                      if (confirm('Delete this post?')) {
-                        await onDeletePost(post.id);
-                      }
-                    }}
-                  >
-                    Delete
-                  </button>
-                )}
+                {isOwner && onDeletePost && (
+                <button
+                  className="w-full text-left px-3 py-2 text-sm text-red-200 hover:bg-red-500/10"
+                  onClick={async () => {
+                    setMenuOpen(false);
+                    if (confirm('Delete this post?')) {
+                      await onDeletePost(post.id);
+                    }
+                  }}
+                >
+                  Delete
+                </button>
+              )}
               </div>
             )}
           </div>
