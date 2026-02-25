@@ -119,7 +119,7 @@ export default function HomePage() {
       if (alive) setLoading(false);
     })();
 
-    // Realtime: refresh feed when posts/likes/comments change
+    // Realtime refresh
     const channel = supabase
       .channel('feed-rt')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'skill_swap_posts' }, () => loadFeed())
