@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import BottomNav from '@/components/BottomNav';
 import PostCard, { Post } from '@/components/PostCard';
 
-type FeedRow = {
+type PostRow = {
   id: string;
   user_id: string;
   title: string;
@@ -15,12 +15,15 @@ type FeedRow = {
   skill_to_learn: string;
   created_at: string;
 
-  username: string | null;
-  full_name: string | null;
-  avatar_url: string | null;
+  profiles: {
+    username: string | null;
+    first_name: string | null;
+    last_name: string | null;
+    avatar_url: string | null;
+  } | null;
 
-  likes_count: number;
-  comments_count: number;
+  post_likes: { count: number }[];
+  post_comments: { count: number }[];
 };
 
 function timeAgo(iso: string) {
@@ -51,8 +54,21 @@ export default function HomePage() {
     setErr(null);
 
     const { data, error } = await supabase
-      .from('v_post_feed')
-      .select('*')
+      .from('skill_swap_posts')
+      .select(
+        `
+        id,
+        user_id,
+        title,
+        description,
+        skill_to_teach,
+        skill_to_learn,
+        created_at,
+        profiles ( username, full_name, avatar_url ),
+        post_likes ( count ),
+        post_comments ( count )
+      `
+      )
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -61,132 +77,58 @@ export default function HomePage() {
       return;
     }
 
-    const mapped: Post[] = (data as FeedRow[]).map((r) => ({
-      id: r.id,
-      author: {
-        name: r.full_name ?? r.username ?? 'Unknown',
-        avatar: (r.username ?? r.full_name ?? 'U')
-          .split(' ')
-          .filter(Boolean)
-          .slice(0, 2)
-          .map((s) => s[0]?.toUpperCase())
-          .join('') || 'U',
-        username: r.username ?? 'unknown',
-      },
-      rating: 5, // keep your UI value; replace with real rating later if you want
-      title: r.title,
-      description: r.description,
-      timestamp: timeAgo(r.created_at),
-      likes: r.likes_count,
-      comments: r.comments_count,
-    }));
+    const mapped: Post[] = ((data ?? []) as unknown as PostRow[]).map((r) => {
+      const name = r.profiles?.first_name && r.profiles?.last_name
+        ? `${r.profiles.first_name} ${r.profiles.last_name}`
+        : r.profiles?.username ?? 'Unknown';
+      const username = r.profiles?.username ?? 'unknown';
+      const likes = r.post_likes?.[0]?.count ?? 0;
+      const comments = r.post_comments?.[0]?.count ?? 0;
+
+      return {
+        id: r.id,
+        author: {
+          name,
+          username,
+          avatar:
+            name
+              .split(' ')
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((s) => s[0]?.toUpperCase())
+              .join('') || 'U',
+        },
+        rating: 5,
+        title: r.title,
+        description: r.description,
+        timestamp: timeAgo(r.created_at),
+        likes,
+        comments,
+      };
+    });
 
     setPosts(mapped);
   }, [supabase]);
 
-  // Optional: like toggle (wire this into PostCard if it supports it)
-  const toggleLike = useCallback(
-    async (postId: string) => {
-      const {
-        data: { user },
-        error: userErr,
-      } = await supabase.auth.getUser();
-
-      if (userErr || !user) {
-        setErr(userErr?.message ?? 'Not authenticated');
-        return;
-      }
-
-      // Check if liked
-      const { data: existing, error: existErr } = await supabase
-        .from('post_likes')
-        .select('post_id')
-        .eq('post_id', postId)
-        .eq('user_id', user.id)
-        .maybeSingle();
-
-      if (existErr) {
-        setErr(existErr.message);
-        return;
-      }
-
-      if (existing) {
-        const { error: delErr } = await supabase
-          .from('post_likes')
-          .delete()
-          .eq('post_id', postId)
-          .eq('user_id', user.id);
-
-        if (delErr) setErr(delErr.message);
-      } else {
-        const { error: insErr } = await supabase
-          .from('post_likes')
-          .insert({ post_id: postId, user_id: user.id });
-
-        if (insErr) setErr(insErr.message);
-      }
-      // No manual refresh needed: realtime will refetch
-    },
-    [supabase]
-  );
-
-  // Optional: add comment (wire into PostCard/comment modal)
-  const addComment = useCallback(
-    async (postId: string, content: string) => {
-      const clean = content.trim();
-      if (!clean) return;
-
-      const {
-        data: { user },
-        error: userErr,
-      } = await supabase.auth.getUser();
-
-      if (userErr || !user) {
-        setErr(userErr?.message ?? 'Not authenticated');
-        return;
-      }
-
-      const { error } = await supabase
-        .from('post_comments')
-        .insert({ post_id: postId, user_id: user.id, content: clean });
-
-      if (error) setErr(error.message);
-      // realtime will refetch
-    },
-    [supabase]
-  );
-
   useEffect(() => {
-    let mounted = true;
+    let alive = true;
 
     (async () => {
       setLoading(true);
       await loadFeed();
-      if (mounted) setLoading(false);
+      if (alive) setLoading(false);
     })();
 
-    // Realtime subscriptions: any change triggers a refetch
+    // Realtime: refresh feed when posts/likes/comments change
     const channel = supabase
-      .channel('feed-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'skill_swap_posts' },
-        () => loadFeed()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'post_likes' },
-        () => loadFeed()
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'post_comments' },
-        () => loadFeed()
-      )
+      .channel('feed-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'skill_swap_posts' }, () => loadFeed())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_likes' }, () => loadFeed())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments' }, () => loadFeed())
       .subscribe();
 
     return () => {
-      mounted = false;
+      alive = false;
       supabase.removeChannel(channel);
     };
   }, [supabase, loadFeed]);
@@ -194,14 +136,10 @@ export default function HomePage() {
   return (
     <div className="min-h-screen bg-[#1a2c36] pb-24">
       <div className="max-w-2xl mx-auto">
-        {/* Header */}
         <header className="bg-[#2d3f47] border-b border-[#3a4f5a] p-4 sticky top-0 z-10">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold text-white">SkillSwap</h1>
-          </div>
+          <h1 className="text-xl font-bold text-white">SkillSwap</h1>
         </header>
 
-        {/* Feed */}
         <div className="p-4 space-y-4">
           {err && (
             <div className="rounded-md border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-200">
@@ -214,16 +152,7 @@ export default function HomePage() {
           ) : posts.length === 0 ? (
             <div className="text-white/70 text-sm">No posts yet.</div>
           ) : (
-            posts.map((post) => (
-              <PostCard
-                key={post.id}
-                post={post}
-
-                // If your PostCard supports handlers, uncomment and match prop names:
-                // onLike={() => toggleLike(post.id)}
-                // onComment={(text: string) => addComment(post.id, text)}
-              />
-            ))
+            posts.map((p) => <PostCard key={p.id} post={p} />)
           )}
         </div>
       </div>
