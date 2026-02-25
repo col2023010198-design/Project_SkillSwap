@@ -8,7 +8,7 @@ export interface Post {
   author: {
     first_name: string;
     last_name: string;
-    avatar: string;   // initials fallback (or you can wire avatar_url later)
+    avatar: string; // initials fallback
     username: string;
   };
   rating: number;
@@ -18,6 +18,14 @@ export interface Post {
   likes: number;
   comments: number;
 }
+
+type ProfileRow = {
+  id: string;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  avatar_url: string | null;
+};
 
 type CommentRow = {
   id: string;
@@ -59,13 +67,11 @@ export default function PostCard({ post }: { post: Post }) {
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
     if (!url || !key) {
       throw new Error(
         'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY. Check .env.local and restart dev server.'
       );
     }
-
     return createClient(url, key);
   }, []);
 
@@ -109,37 +115,63 @@ export default function PostCard({ post }: { post: Post }) {
     };
   }, [open, supabase]);
 
+  // ✅ FINAL: load comments, then load profiles, then merge (NO nested join)
   const loadComments = async () => {
     setLoadingComments(true);
     setActionError(null);
 
-    // If your FK name differs, change `post_comments_user_id_fkey`
-    const { data, error } = await supabase
+    // 1) comments
+    const { data: cData, error: cErr } = await supabase
       .from('post_comments')
-      .select(
-        `
-        id,
-        content,
-        created_at,
-        user_id,
-        profiles:profiles!post_comments_user_id_fkey (
-          username,
-          first_name,
-          last_name,
-          avatar_url
-        )
-      `
-      )
+      .select('id, content, created_at, user_id')
       .eq('post_id', post.id)
       .order('created_at', { ascending: false });
 
-    if (error) {
-      setActionError(error.message);
+    if (cErr) {
+      setActionError(cErr.message);
       setLoadingComments(false);
       return;
     }
 
-    setComments((data ?? []) as unknown as CommentRow[]);
+    const commentsRaw = (cData ?? []) as Array<{
+      id: string;
+      content: string;
+      created_at: string;
+      user_id: string;
+    }>;
+
+    if (commentsRaw.length === 0) {
+      setComments([]);
+      setLoadingComments(false);
+      return;
+    }
+
+    const userIds = Array.from(new Set(commentsRaw.map((c) => c.user_id)));
+
+    // 2) profiles for those commenters
+    const { data: pData, error: pErr } = await supabase
+      .from('profiles')
+      .select('id, username, first_name, last_name, avatar_url')
+      .in('id', userIds);
+
+    if (pErr) {
+      setActionError(pErr.message);
+      setLoadingComments(false);
+      return;
+    }
+
+    const profileMap = new Map<string, ProfileRow>();
+    for (const pr of (pData ?? []) as ProfileRow[]) {
+      profileMap.set(pr.id, pr);
+    }
+
+    // 3) merge
+    const merged: CommentRow[] = commentsRaw.map((c) => ({
+      ...c,
+      profiles: profileMap.get(c.user_id) ?? null,
+    }));
+
+    setComments(merged);
     setLoadingComments(false);
   };
 
@@ -148,6 +180,7 @@ export default function PostCard({ post }: { post: Post }) {
 
     loadComments();
 
+    // realtime updates for this post's comments
     const channel = supabase
       .channel(`comments:${post.id}`)
       .on(
@@ -238,6 +271,7 @@ export default function PostCard({ post }: { post: Post }) {
 
     setCommentText('');
     setCommentsLocal((n) => n + 1);
+    // list refreshes via realtime
   };
 
   const deleteComment = async (commentId: string) => {
@@ -251,6 +285,7 @@ export default function PostCard({ post }: { post: Post }) {
     }
 
     setCommentsLocal((n) => Math.max(0, n - 1));
+    // list refreshes via realtime
   };
 
   return (
@@ -366,12 +401,10 @@ export default function PostCard({ post }: { post: Post }) {
                   <div className="text-sm text-white/60">No comments yet.</div>
                 ) : (
                   comments.map((c) => {
+                    const pr = c.profiles;
                     const cName =
-                      `${c.profiles?.first_name ?? ''} ${c.profiles?.last_name ?? ''}`.trim() ||
-                      c.profiles?.username ||
-                      'Unknown';
-
-                    const cUser = c.profiles?.username ?? 'unknown';
+                      `${pr?.first_name ?? ''} ${pr?.last_name ?? ''}`.trim() || pr?.username || 'Unknown';
+                    const cUser = pr?.username ?? 'unknown';
 
                     return (
                       <div key={c.id} className="bg-[#2d3f47] border border-[#3a4f5a] rounded-lg p-3">
