@@ -224,3 +224,43 @@ export async function markMessagesAsRead(
     return { data: null, error: 'An unexpected error occurred' };
   }
 }
+
+// Delete a conversation
+export async function deleteConversation(
+  conversationId: string,
+  currentUserId: string
+): Promise<ApiResponse<void>> {
+  try {
+    // Verify user is a participant
+    const { data: conversation, error: fetchError } = await supabase
+      .from('conversations')
+      .select('participant_one_id, participant_two_id')
+      .eq('id', conversationId)
+      .single();
+
+    if (fetchError || !conversation) {
+      return { data: null, error: 'Conversation not found' };
+    }
+
+    if (conversation.participant_one_id !== currentUserId && 
+        conversation.participant_two_id !== currentUserId) {
+      return { data: null, error: 'Unauthorized to delete this conversation' };
+    }
+
+    // Delete the conversation (messages will cascade delete)
+    const { error: deleteError } = await supabase
+      .from('conversations')
+      .delete()
+      .eq('id', conversationId);
+
+    if (deleteError) {
+      console.error('Error deleting conversation:', deleteError);
+      return { data: null, error: 'Failed to delete conversation' };
+    }
+
+    return { data: null, error: null };
+  } catch (err) {
+    console.error('Unexpected error in deleteConversation:', err);
+    return { data: null, error: 'An unexpected error occurred' };
+  }
+}

@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import BottomNav from '@/components/BottomNav';
 import ErrorDisplay from '@/components/ErrorDisplay';
 import { supabase } from '@/lib/supabase';
-import { getConversations, getMessages, sendMessage, markMessagesAsRead, getOrCreateConversation } from '@/lib/api/messaging';
+import { getConversations, getMessages, sendMessage, markMessagesAsRead, getOrCreateConversation, deleteConversation } from '@/lib/api/messaging';
 import { subscribeToMessages, unsubscribeFromMessages, subscribeToConversationUpdates } from '@/lib/api/realtime';
 import { formatTimestamp, getDisplayName, validateMessageContent } from '@/lib/utils/messaging';
 import { ConversationWithDetails, MessageWithSender } from '@/lib/types/messaging';
@@ -27,6 +27,7 @@ function MessagesPageContent() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [messageError, setMessageError] = useState<string | null>(null);
+  const [deletingConversation, setDeletingConversation] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageChannelRef = useRef<RealtimeChannel | null>(null);
   const conversationChannelRef = useRef<RealtimeChannel | null>(null);
@@ -240,6 +241,34 @@ function MessagesPageContent() {
     setMessageError(null);
   };
 
+  const handleDeleteConversation = async (conversationId: string) => {
+    if (!currentUserId) return;
+    
+    if (!confirm('Delete this conversation? This cannot be undone.')) {
+      return;
+    }
+
+    setDeletingConversation(conversationId);
+    
+    const { error: deleteError } = await deleteConversation(conversationId, currentUserId);
+    
+    if (deleteError) {
+      setError(deleteError);
+      setDeletingConversation(null);
+      return;
+    }
+
+    // If we're viewing this conversation, go back to list
+    if (selectedConversation === conversationId) {
+      setSelectedConversation(null);
+      setMessages([]);
+    }
+
+    // Refresh conversations
+    await refreshConversations();
+    setDeletingConversation(null);
+  };
+
   if (!currentUserId) {
     return (
       <div className="min-h-screen bg-[#1a2c36] flex items-center justify-center">
@@ -296,7 +325,7 @@ function MessagesPageContent() {
                 <span className="text-white font-semibold text-sm">{initials}</span>
               )}
             </div>
-            <div>
+            <div className="flex-1">
               <h1 className="text-xl font-bold text-white">
                 {otherUserName}
               </h1>
@@ -304,6 +333,22 @@ function MessagesPageContent() {
                 {otherUserEmail}
               </p>
             </div>
+            {selectedConversation !== 'new' && (
+              <button
+                onClick={() => handleDeleteConversation(selectedConversation)}
+                disabled={deletingConversation === selectedConversation}
+                className="text-red-400 hover:text-red-300 transition-colors disabled:opacity-50"
+                title="Delete conversation"
+              >
+                {deletingConversation === selectedConversation ? (
+                  <div className="w-5 h-5 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                  </svg>
+                )}
+              </button>
+            )}
           </header>
 
           {/* Messages */}
@@ -420,44 +465,61 @@ function MessagesPageContent() {
               const avatarUrl = conversation.other_participant?.user_metadata?.avatar_url;
               const displayName = conversation.other_participant ? getDisplayName(conversation.other_participant) : 'Unknown User';
               const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+              const isDeleting = deletingConversation === conversation.id;
               
               return (
-                <button
-                  key={conversation.id}
-                  onClick={() => setSelectedConversation(conversation.id)}
-                  className="w-full text-left p-4 hover:bg-[#2d3f47] transition-colors border-b border-[#3a4f5a] last:border-b-0"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#5fa4c3] to-[#4a7a8d] flex-shrink-0 overflow-hidden flex items-center justify-center">
-                      {avatarUrl ? (
-                        <img 
-                          src={avatarUrl} 
-                          alt={displayName}
-                          className="w-full h-full object-cover"
-                          referrerPolicy="no-referrer"
-                        />
-                      ) : (
-                        <span className="text-white font-semibold text-sm">{initials}</span>
+                <div key={conversation.id} className="relative group">
+                  <button
+                    onClick={() => setSelectedConversation(conversation.id)}
+                    disabled={isDeleting}
+                    className="w-full text-left p-4 hover:bg-[#2d3f47] transition-colors border-b border-[#3a4f5a] last:border-b-0 disabled:opacity-50"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#5fa4c3] to-[#4a7a8d] flex-shrink-0 overflow-hidden flex items-center justify-center">
+                        {avatarUrl ? (
+                          <img 
+                            src={avatarUrl} 
+                            alt={displayName}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <span className="text-white font-semibold text-sm">{initials}</span>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-semibold text-white">
+                            {displayName}
+                          </h3>
+                          <span className="text-xs text-gray-400">
+                            {conversation.last_message ? formatTimestamp(conversation.last_message.created_at) : ''}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-400 truncate">
+                          {conversation.last_message?.content || 'No messages yet'}
+                        </p>
+                      </div>
+                      {conversation.unread_count > 0 && (
+                        <div className="w-2 h-2 rounded-full bg-[#5fa4c3] flex-shrink-0 mt-2" />
                       )}
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between">
-                        <h3 className="font-semibold text-white">
-                          {displayName}
-                        </h3>
-                        <span className="text-xs text-gray-400">
-                          {conversation.last_message ? formatTimestamp(conversation.last_message.created_at) : ''}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-400 truncate">
-                        {conversation.last_message?.content || 'No messages yet'}
-                      </p>
-                    </div>
-                    {conversation.unread_count > 0 && (
-                      <div className="w-2 h-2 rounded-full bg-[#5fa4c3] flex-shrink-0 mt-2" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteConversation(conversation.id)}
+                    disabled={isDeleting}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg disabled:opacity-50"
+                    title="Delete conversation"
+                  >
+                    {isDeleting ? (
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
                     )}
-                  </div>
-                </button>
+                  </button>
+                </div>
               );
             })}
           </div>
