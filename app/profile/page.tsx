@@ -279,10 +279,6 @@ export default function ProfilePage() {
 
                 <div className="flex gap-8 w-full justify-center pt-4 border-t border-[#3a4f5a]">
                   <div className="text-center">
-                    <p className="text-2xl font-bold text-[#5fa4c3]">{profile?.rating != null ? Number(profile.rating).toFixed(1) : '0.0'}</p>
-                    <p className="text-xs text-gray-400">Rating</p>
-                  </div>
-                  <div className="text-center">
                     <p className="text-2xl font-bold text-[#5fa4c3]">{loadingPosts ? '…' : totalPostsCount}</p>
                     <p className="text-xs text-gray-400">Posts</p>
                   </div>
