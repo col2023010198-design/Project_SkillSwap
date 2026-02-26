@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
 export interface Post {
@@ -73,6 +74,7 @@ export default function PostCard({
   post: Post;
   onDeletePost?: (postId: string) => Promise<void> | void;
 }) {
+  const router = useRouter();
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -97,6 +99,7 @@ export default function PostCard({
   const [actionError, setActionError] = useState<string | null>(null);
   const [likesLocal, setLikesLocal] = useState(post.likes);
   const [commentsLocal, setCommentsLocal] = useState(post.comments);
+  const [sendingMessage, setSendingMessage] = useState(false);
 
   useEffect(() => setLikesLocal(post.likes), [post.likes]);
   useEffect(() => setCommentsLocal(post.comments), [post.comments]);
@@ -340,6 +343,24 @@ export default function PostCard({
     setCommentsLocal((n) => Math.max(0, n - 1));
   };
 
+  const handleMessageClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!me) {
+      setActionError('Please log in to send messages');
+      return;
+    }
+
+    if (me === post.user_id) {
+      setActionError('You cannot message yourself');
+      return;
+    }
+
+    // Navigate to messages page with the other user's ID as a query parameter
+    // The conversation will be created when the first message is sent
+    router.push(`/message?user=${post.user_id}`);
+  };
+
   return (
     <>
       {/* Card */}
@@ -440,6 +461,17 @@ export default function PostCard({
             >
               💬 {commentsLocal}
             </button>
+
+            {!isOwner && (
+              <button
+                className="hover:text-[#5fa4c3] transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                onClick={handleMessageClick}
+                disabled={sendingMessage}
+                aria-label="Send message"
+              >
+                {sendingMessage ? '⏳' : '✉️'} Message
+              </button>
+            )}
           </div>
         </div>
 
