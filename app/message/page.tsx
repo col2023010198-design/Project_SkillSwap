@@ -504,7 +504,7 @@ function MessagesPageContent() {
                             {conversation.last_message ? formatTimestamp(conversation.last_message.created_at) : ''}
                           </span>
                         </div>
-                        <p className="text-sm text-gray-400 truncate">
+                        <p className="text-sm text-gray-400">
                           {conversation.last_message?.content || 'No messages yet'}
                         </p>
                       </div>
