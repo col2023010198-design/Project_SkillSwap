@@ -1,7 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link'; 
+import Link from 'next/link';
+import UpperNav from '@/components/UpperNav';
 import BottomNav from '@/components/BottomNav';
 
 interface Message {
@@ -56,9 +57,10 @@ export default function MessagesPage() {
 
     return (
       <div className="min-h-screen bg-[#1a2c36] pb-24">
+        <UpperNav />
         <div className="max-w-2xl mx-auto flex flex-col h-screen">
           {/* Header */}
-          <header className="bg-[#2d3f47] border-b border-[#3a4f5a] p-4 flex items-center gap-4 sticky top-0 z-10">
+          <header className="bg-[#2d3f47] border-b border-[#3a4f5a] p-4 flex items-center gap-4">
             <div>
               <h1 className="text-xl font-bold text-white">{conversation?.sender}</h1>
               <p className="text-xs text-gray-400">@{conversation?.senderUsername}</p>
@@ -111,11 +113,8 @@ export default function MessagesPage() {
 
   return (
     <div className="min-h-screen bg-[#1a2c36] pb-24">
+      <UpperNav />
       <div className="max-w-2xl mx-auto">
-        {/* Header */}
-        <header className="bg-[#2d3f47] border-b border-[#3a4f5a] p-4 sticky top-0 z-10 flex items-center justify-between">
-          <h1 className="text-xl font-bold text-white">Messages</h1>
-        </header>
 
         {/* Conversations */}
         <div className="divide-y divide-[#3a4f5a]">

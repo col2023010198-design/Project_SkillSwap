@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import UpperNav from '@/components/UpperNav';
 import BottomNav from '@/components/BottomNav';
 import { updateProfile, fetchProfile } from '@/lib/profile';
 import { supabase } from '@/lib/supabase';
@@ -160,9 +161,10 @@ export default function EditProfilePage() {
 
   return (
     <div className="min-h-screen bg-[#1a2c36] pb-24">
+      <UpperNav />
       <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <header className="bg-[#2d3f47] border-b border-[#3a4f5a] p-4 sticky top-0 z-10 flex items-center gap-4">
+        <header className="bg-[#2d3f47] border-b border-[#3a4f5a] p-4 flex items-center gap-4">
           <button onClick={() => router.back()} className="text-gray-400 hover:text-gray-300">
             <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
               <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z" />
