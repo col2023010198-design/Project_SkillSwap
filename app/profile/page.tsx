@@ -240,7 +240,7 @@ export default function ProfilePage() {
   const totalRatesReceived = userPosts.reduce((sum, p) => sum + (p.ratings_count ?? 0), 0);
 
   return (
-    <div className="min-h-screen bg-[#1a2c36] pb-24">
+    <div className="min-h-screen bg-[#1a2c36] pb-28">
       <UpperNav />
       <div className="max-w-2xl mx-auto">
 

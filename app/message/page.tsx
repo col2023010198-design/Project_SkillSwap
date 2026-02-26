@@ -56,7 +56,7 @@ export default function MessagesPage() {
     const conversation = conversations.find((c) => c.id === selectedConversation);
 
     return (
-      <div className="min-h-screen bg-[#1a2c36] pb-24">
+      <div className="min-h-screen bg-[#1a2c36] pb-28">
         <UpperNav />
         <div className="max-w-2xl mx-auto flex flex-col h-screen">
           {/* Header */}
@@ -112,7 +112,7 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#1a2c36] pb-24">
+    <div className="min-h-screen bg-[#1a2c36] pb-28">
       <UpperNav />
       <div className="max-w-2xl mx-auto">
 

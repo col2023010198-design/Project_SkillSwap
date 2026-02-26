@@ -68,7 +68,7 @@ export default function CreatePostPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#1a2c36] pb-24">
+    <div className="min-h-screen bg-[#1a2c36] pb-28">
       <UpperNav />
       <div className="max-w-2xl mx-auto">
         <header className="bg-[#2d3f47] border-b border-[#3a4f5a] p-4 flex items-center gap-4">
