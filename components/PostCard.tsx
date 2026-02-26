@@ -11,9 +11,10 @@ export interface Post {
     last_name: string;
     username: string;
     avatar: string; // initials fallback
-    avatar_url?: string | null; // ✅ actual image URL
+    avatar_url?: string | null; // image url
   };
-  rating: number;
+  rating: number; // average rating (0 if none)
+  ratings_count: number; // number of ratings
   title: string;
   description: string;
   timestamp: string;
@@ -70,16 +71,12 @@ export default function PostCard({
   onDeletePost,
 }: {
   post: Post;
-  onDeletePost?: (postId: string) => Promise<void> | void; // ✅ optional so profile page won't break
+  onDeletePost?: (postId: string) => Promise<void> | void;
 }) {
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) {
-      throw new Error(
-        'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY. Check .env.local and restart dev server.'
-      );
-    }
+    if (!url || !key) throw new Error('Missing Supabase env vars');
     return createClient(url, key);
   }, []);
 
@@ -88,7 +85,10 @@ export default function PostCard({
 
   const [open, setOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [rateOpen, setRateOpen] = useState(false);
+
   const [me, setMe] = useState<string | null>(null);
+  const [myRating, setMyRating] = useState<number | null>(null);
 
   const [comments, setComments] = useState<CommentRow[]>([]);
   const [commentText, setCommentText] = useState('');
@@ -101,7 +101,7 @@ export default function PostCard({
   useEffect(() => setLikesLocal(post.likes), [post.likes]);
   useEffect(() => setCommentsLocal(post.comments), [post.comments]);
 
-  // current user id (for delete own post/comment)
+  // current user
   useEffect(() => {
     let active = true;
     (async () => {
@@ -115,6 +115,8 @@ export default function PostCard({
     };
   }, [supabase]);
 
+  const isOwner = !!me && me === post.user_id;
+
   // close menu on outside click
   useEffect(() => {
     if (!menuOpen) return;
@@ -123,9 +125,64 @@ export default function PostCard({
     return () => document.removeEventListener('click', onDoc);
   }, [menuOpen]);
 
-  const isOwner = !!me && me === post.user_id;
+  // Load my existing rating (when opening rate modal)
+  useEffect(() => {
+    if (!rateOpen) return;
 
-  // comments loader: 2-step fetch (comments -> profiles), avoids schema-cache relationship issues
+    (async () => {
+      setActionError(null);
+
+      const {
+        data: { user },
+        error: userErr,
+      } = await supabase.auth.getUser();
+
+      if (userErr || !user) return;
+
+      const { data, error } = await supabase
+        .from('post_ratings')
+        .select('rating')
+        .eq('post_id', post.id)
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (error) {
+        setActionError(error.message);
+        return;
+      }
+
+      setMyRating((data as any)?.rating ?? null);
+    })();
+  }, [rateOpen, post.id, supabase]);
+
+  const ratePost = async (value: number) => {
+    setActionError(null);
+
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser();
+
+    if (userErr || !user) {
+      setActionError(userErr?.message ?? 'Not authenticated');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('post_ratings')
+      .upsert({ post_id: post.id, user_id: user.id, rating: value }, { onConflict: 'post_id,user_id' });
+
+    if (error) {
+      setActionError(error.message);
+      return;
+    }
+
+    setMyRating(value);
+    setRateOpen(false);
+    // feed/profile will refresh via realtime in those pages (recommended)
+  };
+
+  // comments loader (2-step)
   const loadComments = async () => {
     setLoadingComments(true);
     setActionError(null);
@@ -169,20 +226,18 @@ export default function PostCard({
     }
 
     const profileMap = new Map<string, ProfileRow>();
-    for (const pr of (pData ?? []) as ProfileRow[]) {
-      profileMap.set(pr.id, pr);
-    }
+    for (const pr of (pData ?? []) as ProfileRow[]) profileMap.set(pr.id, pr);
 
-    const merged: CommentRow[] = commentsRaw.map((c) => ({
-      ...c,
-      profiles: profileMap.get(c.user_id) ?? null,
-    }));
+    setComments(
+      commentsRaw.map((c) => ({
+        ...c,
+        profiles: profileMap.get(c.user_id) ?? null,
+      }))
+    );
 
-    setComments(merged);
     setLoadingComments(false);
   };
 
-  // load + realtime (when modal open)
   useEffect(() => {
     if (!open) return;
 
@@ -239,11 +294,7 @@ export default function PostCard({
       if (delErr) setActionError(delErr.message);
       else setLikesLocal((n) => Math.max(0, n - 1));
     } else {
-      const { error: insErr } = await supabase.from('post_likes').insert({
-        post_id: post.id,
-        user_id: user.id,
-      });
-
+      const { error: insErr } = await supabase.from('post_likes').insert({ post_id: post.id, user_id: user.id });
       if (insErr) setActionError(insErr.message);
       else setLikesLocal((n) => n + 1);
     }
@@ -265,11 +316,7 @@ export default function PostCard({
       return;
     }
 
-    const { error } = await supabase.from('post_comments').insert({
-      post_id: post.id,
-      user_id: user.id,
-      content: clean,
-    });
+    const { error } = await supabase.from('post_comments').insert({ post_id: post.id, user_id: user.id, content: clean });
 
     if (error) {
       setActionError(error.message);
@@ -306,7 +353,6 @@ export default function PostCard({
         className="bg-[#2d3f47] rounded-lg p-4 border border-[#3a4f5a] hover:border-[#5fa4c3] transition-colors cursor-pointer"
       >
         <div className="flex items-start gap-3 mb-3">
-          {/* ✅ Avatar supports avatar_url */}
           <div className="w-10 h-10 rounded-full overflow-hidden bg-gradient-to-br from-[#5fa4c3] to-[#4a7a8d] flex-shrink-0 flex items-center justify-center text-white font-semibold">
             {post.author.avatar_url ? (
               <img
@@ -327,11 +373,12 @@ export default function PostCard({
                 {Array.from({ length: 5 }).map((_, i) => (
                   <span
                     key={i}
-                    className={`text-xs ${i < Math.floor(post.rating) ? 'text-yellow-400' : 'text-gray-600'}`}
+                    className={`text-xs ${i < Math.round(post.rating || 0) ? 'text-yellow-400' : 'text-gray-600'}`}
                   >
                     ★
                   </span>
                 ))}
+                <span className="text-xs text-gray-400 ml-1">({post.ratings_count ?? 0})</span>
               </div>
             </div>
             <p className="text-xs text-gray-400">@{post.author.username}</p>
@@ -339,11 +386,7 @@ export default function PostCard({
 
           {/* ⋮ menu */}
           <div className="relative" onClick={(e) => e.stopPropagation()}>
-            <button
-              className="text-gray-400 hover:text-gray-300"
-              onClick={() => setMenuOpen((v) => !v)}
-              aria-label="Post menu"
-            >
+            <button className="text-gray-400 hover:text-gray-300" onClick={() => setMenuOpen((v) => !v)} aria-label="Post menu">
               ⋮
             </button>
 
@@ -353,10 +396,10 @@ export default function PostCard({
                   className="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-white/5"
                   onClick={() => {
                     setMenuOpen(false);
-                    setOpen(true);
+                    setRateOpen(true);
                   }}
                 >
-                  Open
+                  Rate
                 </button>
 
                 {isOwner && onDeletePost && (
@@ -383,11 +426,7 @@ export default function PostCard({
         <div className="flex items-center justify-between text-xs text-gray-400 border-t border-[#3a4f5a] pt-3">
           <span>{post.timestamp}</span>
           <div className="flex gap-4">
-            <button
-              className="hover:text-[#5fa4c3] transition-colors flex items-center gap-1"
-              onClick={toggleLike}
-              aria-label="Like"
-            >
+            <button className="hover:text-[#5fa4c3] transition-colors flex items-center gap-1" onClick={toggleLike} aria-label="Like">
               ❤️ {likesLocal}
             </button>
 
@@ -411,7 +450,52 @@ export default function PostCard({
         )}
       </div>
 
-      {/* Modal */}
+      {/* Rate Modal */}
+      {rateOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setRateOpen(false)}>
+          <div className="absolute inset-0 bg-black/60" />
+          <div
+            className="relative w-full sm:max-w-md bg-[#1a2c36] border border-[#3a4f5a] rounded-t-2xl sm:rounded-2xl shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-[#3a4f5a] flex items-center justify-between">
+              <div className="text-white font-semibold">Rate this post</div>
+              <button className="text-gray-300 hover:text-white px-2 py-1" onClick={() => setRateOpen(false)}>
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4">
+              <div className="text-sm text-gray-300 mb-3">Tap a star (1–5). Your rating updates anytime.</div>
+
+              <div className="flex items-center justify-center gap-2">
+                {Array.from({ length: 5 }).map((_, i) => {
+                  const val = i + 1;
+                  const active = (myRating ?? 0) >= val;
+                  return (
+                    <button
+                      key={val}
+                      className={`text-3xl ${active ? 'text-yellow-400' : 'text-gray-600'} hover:text-yellow-300`}
+                      onClick={() => ratePost(val)}
+                      aria-label={`Rate ${val}`}
+                    >
+                      ★
+                    </button>
+                  );
+                })}
+              </div>
+
+              {actionError && (
+                <div className="mt-3 rounded-md border border-red-400/40 bg-red-500/10 p-2 text-xs text-red-200">
+                  {actionError}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Comments Modal */}
       {open && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center" onClick={() => setOpen(false)}>
           <div className="absolute inset-0 bg-black/60" />
@@ -427,11 +511,7 @@ export default function PostCard({
                   {displayName} · @{post.author.username}
                 </div>
               </div>
-              <button
-                className="text-gray-300 hover:text-white px-2 py-1"
-                onClick={() => setOpen(false)}
-                aria-label="Close"
-              >
+              <button className="text-gray-300 hover:text-white px-2 py-1" onClick={() => setOpen(false)} aria-label="Close">
                 ✕
               </button>
             </div>
@@ -452,8 +532,7 @@ export default function PostCard({
                 ) : (
                   comments.map((c) => {
                     const pr = c.profiles;
-                    const cName =
-                      `${pr?.first_name ?? ''} ${pr?.last_name ?? ''}`.trim() || pr?.username || 'Unknown';
+                    const cName = `${pr?.first_name ?? ''} ${pr?.last_name ?? ''}`.trim() || pr?.username || 'Unknown';
                     const cUser = pr?.username ?? 'unknown';
 
                     return (
@@ -467,10 +546,7 @@ export default function PostCard({
                           </div>
 
                           {me && c.user_id === me && (
-                            <button
-                              className="text-xs text-red-200 hover:text-red-100 px-2 py-1"
-                              onClick={() => deleteComment(c.id)}
-                            >
+                            <button className="text-xs text-red-200 hover:text-red-100 px-2 py-1" onClick={() => deleteComment(c.id)}>
                               Delete
                             </button>
                           )}
@@ -492,10 +568,7 @@ export default function PostCard({
                   placeholder="Write a comment…"
                   className="flex-1 bg-[#2d3f47] border border-[#3a4f5a] rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#5fa4c3]"
                 />
-                <button
-                  onClick={submitComment}
-                  className="bg-[#5fa4c3] hover:bg-[#4f93b1] text-[#0b1b22] font-semibold rounded-lg px-4 py-2 text-sm"
-                >
+                <button onClick={submitComment} className="bg-[#5fa4c3] hover:bg-[#4f93b1] text-[#0b1b22] font-semibold rounded-lg px-4 py-2 text-sm">
                   Send
                 </button>
               </div>

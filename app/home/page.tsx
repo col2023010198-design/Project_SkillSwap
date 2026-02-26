@@ -52,14 +52,11 @@ export default function HomePage() {
   const deletePost = useCallback(
     async (postId: string) => {
       setErr(null);
-
       const { error } = await supabase.from('skill_swap_posts').delete().eq('id', postId);
       if (error) {
         setErr(error.message);
         return;
       }
-
-      // instant UI removal
       setPosts((prev) => prev.filter((p) => p.id !== postId));
     },
     [supabase]
@@ -79,14 +76,13 @@ export default function HomePage() {
       return;
     }
 
-    const postsRows = (postData ?? []) as unknown as PostRow[];
+    const postsRows = (postData ?? []) as PostRow[];
     if (postsRows.length === 0) {
       setPosts([]);
       return;
     }
 
     const userIds = Array.from(new Set(postsRows.map((p) => p.user_id)));
-
     const { data: profData, error: profErr } = await supabase
       .from('profiles')
       .select('id,username,first_name,last_name,avatar_url')
@@ -98,42 +94,51 @@ export default function HomePage() {
     }
 
     const profileMap = new Map<string, ProfileRow>();
-    for (const pr of (profData ?? []) as unknown as ProfileRow[]) {
-      profileMap.set(pr.id, pr);
-    }
+    for (const pr of (profData ?? []) as ProfileRow[]) profileMap.set(pr.id, pr);
 
     const postIds = postsRows.map((p) => p.id);
 
-    const { data: likesRows, error: likesErr } = await supabase
-      .from('post_likes')
-      .select('post_id')
-      .in('post_id', postIds);
-
+    // likes count
+    const { data: likesRows, error: likesErr } = await supabase.from('post_likes').select('post_id').in('post_id', postIds);
     if (likesErr) {
       setErr(likesErr.message);
       return;
     }
-
     const likeCountMap = new Map<string, number>();
     for (const row of likesRows ?? []) {
       const pid = (row as any).post_id as string;
       likeCountMap.set(pid, (likeCountMap.get(pid) ?? 0) + 1);
     }
 
-    const { data: commentRows, error: comErr } = await supabase
-      .from('post_comments')
-      .select('post_id')
-      .in('post_id', postIds);
-
+    // comments count
+    const { data: commentRows, error: comErr } = await supabase.from('post_comments').select('post_id').in('post_id', postIds);
     if (comErr) {
       setErr(comErr.message);
       return;
     }
-
     const commentCountMap = new Map<string, number>();
     for (const row of commentRows ?? []) {
       const pid = (row as any).post_id as string;
       commentCountMap.set(pid, (commentCountMap.get(pid) ?? 0) + 1);
+    }
+
+    // ratings avg + count
+    const { data: ratingRows, error: rateErr } = await supabase
+      .from('post_ratings')
+      .select('post_id, rating')
+      .in('post_id', postIds);
+
+    if (rateErr) {
+      setErr(rateErr.message);
+      return;
+    }
+
+    const ratingAgg = new Map<string, { sum: number; count: number }>();
+    for (const row of ratingRows ?? []) {
+      const pid = (row as any).post_id as string;
+      const val = Number((row as any).rating ?? 0);
+      const prev = ratingAgg.get(pid) ?? { sum: 0, count: 0 };
+      ratingAgg.set(pid, { sum: prev.sum + val, count: prev.count + 1 });
     }
 
     const mapped: Post[] = postsRows.map((r) => {
@@ -152,7 +157,9 @@ export default function HomePage() {
           .map((w) => w.charAt(0).toUpperCase())
           .join('') || 'U';
 
-      const avatarUrl = pr?.avatar_url ?? null;
+      const agg = ratingAgg.get(r.id);
+      const ratings_count = agg?.count ?? 0;
+      const rating = ratings_count > 0 ? agg!.sum / ratings_count : 0;
 
       return {
         id: r.id,
@@ -162,9 +169,10 @@ export default function HomePage() {
           last_name: last,
           username,
           avatar,
-          avatar_url: avatarUrl,
+          avatar_url: pr?.avatar_url ?? null,
         },
-        rating: 5,
+        rating,
+        ratings_count,
         title: r.title,
         description: r.description,
         timestamp: timeAgo(r.created_at),
@@ -190,6 +198,7 @@ export default function HomePage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'skill_swap_posts' }, () => loadFeed())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'post_likes' }, () => loadFeed())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'post_comments' }, () => loadFeed())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'post_ratings' }, () => loadFeed())
       .subscribe();
 
     return () => {
