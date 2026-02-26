@@ -480,7 +480,7 @@ function MessagesPageContent() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
+                        <div className="flex items justify-between">
                           <h3 className="font-semibold text-white">
                             {displayName}
                           </h3>
