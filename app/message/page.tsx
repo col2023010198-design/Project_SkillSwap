@@ -480,7 +480,7 @@ function MessagesPageContent() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items justify-between">
+                        <div className="flex items-center justify-between">
                           <h3 className="font-semibold text-white">
                             {displayName}
                           </h3>
@@ -488,7 +488,7 @@ function MessagesPageContent() {
                             {conversation.last_message ? formatTimestamp(conversation.last_message.created_at) : ''}
                           </span>
                         </div>
-                        <p className="text-gray-400">
+                        <p className="text-xs text-gray-400 text-right">
                           {conversation.last_message?.content || 'No messages yet'}
                         </p>
                       </div>
