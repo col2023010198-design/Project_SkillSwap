@@ -239,6 +239,7 @@ export async function deleteConversation(
       .single();
 
     if (fetchError || !conversation) {
+      console.error('Conversation not found:', fetchError);
       return { data: null, error: 'Conversation not found' };
     }
 
@@ -247,7 +248,20 @@ export async function deleteConversation(
       return { data: null, error: 'Unauthorized to delete this conversation' };
     }
 
-    // Delete the conversation (messages will cascade delete)
+    // First, explicitly delete all messages (CASCADE should do this, but being explicit)
+    const { error: messagesDeleteError } = await supabase
+      .from('messages')
+      .delete()
+      .eq('conversation_id', conversationId);
+
+    if (messagesDeleteError) {
+      console.error('Error deleting messages:', messagesDeleteError);
+      // Continue anyway, CASCADE should handle it
+    } else {
+      console.log('Messages deleted successfully');
+    }
+
+    // Delete the conversation
     const { error: deleteError } = await supabase
       .from('conversations')
       .delete()
@@ -255,9 +269,10 @@ export async function deleteConversation(
 
     if (deleteError) {
       console.error('Error deleting conversation:', deleteError);
-      return { data: null, error: 'Failed to delete conversation' };
+      return { data: null, error: `Failed to delete conversation: ${deleteError.message}` };
     }
 
+    console.log('Conversation deleted successfully from database');
     return { data: null, error: null };
   } catch (err) {
     console.error('Unexpected error in deleteConversation:', err);

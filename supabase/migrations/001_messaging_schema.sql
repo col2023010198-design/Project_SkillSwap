@@ -128,6 +128,20 @@ CREATE POLICY "Users can mark received messages as read"
     read_at IS NOT NULL
   );
 
+-- Messages: Users can delete messages from their conversations
+CREATE POLICY "Users can delete messages in their conversations"
+  ON messages FOR DELETE
+  USING (
+    EXISTS (
+      SELECT 1 FROM conversations
+      WHERE conversations.id = messages.conversation_id
+      AND (
+        conversations.participant_one_id = auth.uid() OR
+        conversations.participant_two_id = auth.uid()
+      )
+    )
+  );
+
 -- ============================================================================
 -- TRIGGERS
 -- ============================================================================
