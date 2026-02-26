@@ -251,7 +251,10 @@ function MessagesPageContent() {
       e.stopPropagation();
     }
     
-    if (!currentUserId) return;
+    if (!currentUserId) {
+      alert('User not authenticated');
+      return;
+    }
     
     setOpenMenuId(null); // Close menu
     
@@ -266,7 +269,7 @@ function MessagesPageContent() {
     
     if (deleteError) {
       console.error('Delete error:', deleteError);
-      alert(`Failed to delete: ${deleteError}`);
+      alert(`Failed to delete conversation: ${deleteError}\n\nPlease check APPLY_DELETE_POLICY.md file for instructions to fix this.`);
       setError(deleteError);
       setDeletingConversation(null);
       return;
@@ -274,17 +277,20 @@ function MessagesPageContent() {
 
     console.log('Conversation deleted successfully');
 
+    // Remove from local state immediately
+    setConversations(prev => prev.filter(c => c.id !== conversationId));
+
     // If we're viewing this conversation, go back to list
     if (selectedConversation === conversationId) {
       setSelectedConversation(null);
       setMessages([]);
     }
 
-    // Refresh conversations immediately
+    // Refresh conversations from server to confirm
     console.log('Refreshing conversations...');
     await refreshConversations();
     setDeletingConversation(null);
-    console.log('Refresh complete');
+    console.log('Delete complete');
   };
 
   if (!currentUserId) {
