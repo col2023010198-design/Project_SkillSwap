@@ -388,7 +388,7 @@ function MessagesPageContent() {
                         : 'bg-[#2d3f47] text-white rounded-2xl rounded-tl-none border border-[#3a4f5a]'
                     } px-4 py-2 max-w-xs`}>
                       <p className="text-sm">{message.content}</p>
-                      <p className={`text-xs mt-1 ${isOwn ? 'text-blue-100' : 'text-gray-400'}`}>
+                      <p className={`text-xs mt-1 text-right ${isOwn ? 'text-blue-100' : 'text-gray-400'}`}>
                         {formatTimestamp(message.created_at)}
                       </p>
                     </div>
