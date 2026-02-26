@@ -28,6 +28,7 @@ function MessagesPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [messageError, setMessageError] = useState<string | null>(null);
   const [deletingConversation, setDeletingConversation] = useState<string | null>(null);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageChannelRef = useRef<RealtimeChannel | null>(null);
   const conversationChannelRef = useRef<RealtimeChannel | null>(null);
@@ -241,8 +242,14 @@ function MessagesPageContent() {
     setMessageError(null);
   };
 
-  const handleDeleteConversation = async (conversationId: string) => {
+  const handleDeleteConversation = async (conversationId: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    
     if (!currentUserId) return;
+    
+    setOpenMenuId(null); // Close menu
     
     if (!confirm('Delete this conversation? This cannot be undone.')) {
       return;
@@ -264,7 +271,7 @@ function MessagesPageContent() {
       setMessages([]);
     }
 
-    // Refresh conversations
+    // Refresh conversations immediately
     await refreshConversations();
     setDeletingConversation(null);
   };
@@ -466,15 +473,16 @@ function MessagesPageContent() {
               const displayName = conversation.other_participant ? getDisplayName(conversation.other_participant) : 'Unknown User';
               const initials = displayName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
               const isDeleting = deletingConversation === conversation.id;
+              const isMenuOpen = openMenuId === conversation.id;
               
               return (
-                <div key={conversation.id} className="relative group">
-                  <button
-                    onClick={() => setSelectedConversation(conversation.id)}
-                    disabled={isDeleting}
-                    className="w-full text-left p-4 hover:bg-[#2d3f47] transition-colors border-b border-[#3a4f5a] last:border-b-0 disabled:opacity-50"
-                  >
-                    <div className="flex items-start gap-3">
+                <div key={conversation.id} className="relative">
+                  <div className="flex items-start gap-3 p-4 hover:bg-[#2d3f47] transition-colors">
+                    <button
+                      onClick={() => setSelectedConversation(conversation.id)}
+                      disabled={isDeleting}
+                      className="flex items-start gap-3 flex-1 min-w-0 disabled:opacity-50"
+                    >
                       <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#5fa4c3] to-[#4a7a8d] flex-shrink-0 overflow-hidden flex items-center justify-center">
                         {avatarUrl ? (
                           <img 
@@ -500,25 +508,59 @@ function MessagesPageContent() {
                           {conversation.last_message?.content || 'No messages yet'}
                         </p>
                       </div>
+                    </button>
+                    
+                    <div className="flex items-center gap-2">
                       {conversation.unread_count > 0 && (
-                        <div className="w-2 h-2 rounded-full bg-[#5fa4c3] flex-shrink-0 mt-2" />
+                        <div className="w-2 h-2 rounded-full bg-[#5fa4c3] flex-shrink-0" />
                       )}
+                      
+                      <div className="relative">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuId(isMenuOpen ? null : conversation.id);
+                          }}
+                          disabled={isDeleting}
+                          className="text-gray-400 hover:text-white transition-colors p-1 disabled:opacity-50"
+                        >
+                          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z" />
+                          </svg>
+                        </button>
+                        
+                        {isMenuOpen && (
+                          <>
+                            <div 
+                              className="fixed inset-0 z-10" 
+                              onClick={() => setOpenMenuId(null)}
+                            />
+                            <div className="absolute right-0 top-8 z-20 bg-[#2d3f47] border border-[#3a4f5a] rounded-lg shadow-lg overflow-hidden min-w-[160px]">
+                              <button
+                                onClick={(e) => handleDeleteConversation(conversation.id, e)}
+                                disabled={isDeleting}
+                                className="w-full text-left px-4 py-3 text-red-400 hover:bg-[#1a2c36] transition-colors flex items-center gap-2 disabled:opacity-50"
+                              >
+                                {isDeleting ? (
+                                  <>
+                                    <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                                    <span>Deleting...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    <span>Delete</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </div>
                     </div>
-                  </button>
-                  <button
-                    onClick={() => handleDeleteConversation(conversation.id)}
-                    disabled={isDeleting}
-                    className="absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-red-500 hover:bg-red-600 text-white p-2 rounded-lg disabled:opacity-50"
-                    title="Delete conversation"
-                  >
-                    {isDeleting ? (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    ) : (
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    )}
-                  </button>
+                  </div>
                 </div>
               );
             })}

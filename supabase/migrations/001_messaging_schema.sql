@@ -73,6 +73,14 @@ CREATE POLICY "Users can create conversations"
     auth.uid() = participant_two_id
   );
 
+-- Conversations: Users can delete their conversations
+CREATE POLICY "Users can delete their conversations"
+  ON conversations FOR DELETE
+  USING (
+    auth.uid() = participant_one_id OR 
+    auth.uid() = participant_two_id
+  );
+
 -- Messages: Users can view messages from their conversations
 CREATE POLICY "Users can view messages in their conversations"
   ON messages FOR SELECT
