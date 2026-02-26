@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import BottomNav from '@/components/BottomNav';
 import ErrorDisplay from '@/components/ErrorDisplay';
@@ -13,7 +13,7 @@ import { formatTimestamp, getDisplayName, validateMessageContent } from '@/lib/u
 import { ConversationWithDetails, MessageWithSender } from '@/lib/types/messaging';
 import { RealtimeChannel } from '@supabase/supabase-js';
 
-export default function MessagesPage() {
+function MessagesPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -466,5 +466,18 @@ export default function MessagesPage() {
 
       <BottomNav />
     </div>
+  );
+}
+
+
+export default function MessagesPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#1a2c36] flex items-center justify-center">
+        <div className="text-white">Loading...</div>
+      </div>
+    }>
+      <MessagesPageContent />
+    </Suspense>
   );
 }
