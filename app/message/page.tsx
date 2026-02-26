@@ -38,10 +38,14 @@ function MessagesPageContent() {
   const refreshConversations = async () => {
     if (!currentUserId) return;
     
+    console.log('Fetching conversations for user:', currentUserId);
     const { data, error: err } = await getConversations(currentUserId);
     
-    if (!err && data) {
-      setConversations(data);
+    if (err) {
+      console.error('Error refreshing conversations:', err);
+    } else {
+      console.log('Fetched conversations:', data?.length || 0);
+      setConversations(data || []);
     }
   };
 
@@ -257,13 +261,18 @@ function MessagesPageContent() {
 
     setDeletingConversation(conversationId);
     
+    console.log('Deleting conversation:', conversationId);
     const { error: deleteError } = await deleteConversation(conversationId, currentUserId);
     
     if (deleteError) {
+      console.error('Delete error:', deleteError);
+      alert(`Failed to delete: ${deleteError}`);
       setError(deleteError);
       setDeletingConversation(null);
       return;
     }
+
+    console.log('Conversation deleted successfully');
 
     // If we're viewing this conversation, go back to list
     if (selectedConversation === conversationId) {
@@ -272,8 +281,10 @@ function MessagesPageContent() {
     }
 
     // Refresh conversations immediately
+    console.log('Refreshing conversations...');
     await refreshConversations();
     setDeletingConversation(null);
+    console.log('Refresh complete');
   };
 
   if (!currentUserId) {
