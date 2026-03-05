@@ -33,6 +33,10 @@ export interface Database {
           content: string;
           created_at: string;
           read_at: string | null;
+          attachment_url: string | null;
+          attachment_type: 'image' | 'file' | null;
+          attachment_name: string | null;
+          attachment_size: number | null;
         };
         Insert: {
           id?: string;
@@ -41,6 +45,10 @@ export interface Database {
           content: string;
           created_at?: string;
           read_at?: string | null;
+          attachment_url?: string | null;
+          attachment_type?: 'image' | 'file' | null;
+          attachment_name?: string | null;
+          attachment_size?: number | null;
         };
         Update: {
           id?: string;
@@ -49,6 +57,10 @@ export interface Database {
           content?: string;
           created_at?: string;
           read_at?: string | null;
+          attachment_url?: string | null;
+          attachment_type?: 'image' | 'file' | null;
+          attachment_name?: string | null;
+          attachment_size?: number | null;
         };
       };
     };
@@ -87,12 +99,24 @@ export interface MessageWithSender {
   content: string;
   created_at: string;
   read_at: string | null;
+  attachment_url: string | null;
+  attachment_type: 'image' | 'file' | null;
+  attachment_name: string | null;
+  attachment_size: number | null;
   sender?: UserProfile;
 }
 
 export interface MessageInput {
   content: string;
   conversation_id: string;
+  attachment?: File;
+}
+
+export interface MessageAttachment {
+  url: string;
+  type: 'image' | 'file';
+  name: string;
+  size: number;
 }
 
 export interface ConversationInput {

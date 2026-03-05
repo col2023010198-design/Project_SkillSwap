@@ -144,24 +144,40 @@ export async function getConversations(
 export async function sendMessage(
   conversationId: string,
   senderId: string,
-  content: string
+  content: string,
+  attachmentUrl?: string,
+  attachmentType?: 'image' | 'file',
+  attachmentName?: string,
+  attachmentSize?: number
 ): Promise<ApiResponse<MessageWithSender>> {
-  // Validate content
-  const validation = validateMessageContent(content);
-  if (!validation.isValid) {
-    return { data: null, error: validation.errors[0] };
+  // Validate content (allow empty if attachment exists)
+  if (!attachmentUrl) {
+    const validation = validateMessageContent(content);
+    if (!validation.isValid) {
+      return { data: null, error: validation.errors[0] };
+    }
   }
 
   const trimmedContent = content.trim();
 
   try {
+    const messageData: any = {
+      conversation_id: conversationId,
+      sender_id: senderId,
+      content: trimmedContent || '',
+    };
+
+    // Add attachment data if present
+    if (attachmentUrl && attachmentType && attachmentName && attachmentSize) {
+      messageData.attachment_url = attachmentUrl;
+      messageData.attachment_type = attachmentType;
+      messageData.attachment_name = attachmentName;
+      messageData.attachment_size = attachmentSize;
+    }
+
     const { data, error } = await supabase
       .from('messages')
-      .insert({
-        conversation_id: conversationId,
-        sender_id: senderId,
-        content: trimmedContent,
-      })
+      .insert(messageData)
       .select('*')
       .single();
 

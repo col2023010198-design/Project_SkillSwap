@@ -12,6 +12,7 @@ import { subscribeToMessages, unsubscribeFromMessages, subscribeToConversationUp
 import { formatTimestamp, getDisplayName, validateMessageContent } from '@/lib/utils/messaging';
 import { ConversationWithDetails, MessageWithSender } from '@/lib/types/messaging';
 import { RealtimeChannel } from '@supabase/supabase-js';
+import { uploadMessageAttachment, validateFile, getFileType, formatFileSize } from '@/lib/utils/fileUpload';
 
 function MessagesPageContent() {
   const router = useRouter();
@@ -29,6 +30,10 @@ function MessagesPageContent() {
   const [messageError, setMessageError] = useState<string | null>(null);
   const [deletingConversation, setDeletingConversation] = useState<string | null>(null);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageChannelRef = useRef<RealtimeChannel | null>(null);
   const conversationChannelRef = useRef<RealtimeChannel | null>(null);
@@ -194,13 +199,20 @@ function MessagesPageContent() {
     e.preventDefault();
     if (!currentUserId) return;
 
+    // Validate that we have either text or file
+    if (!messageText.trim() && !selectedFile) {
+      setMessageError('Please enter a message or select a file');
+      return;
+    }
+
     const validation = validateMessageContent(messageText);
-    if (!validation.isValid) {
+    if (messageText.trim() && !validation.isValid) {
       setMessageError(validation.errors[0]);
       return;
     }
 
     setSending(true);
+    setUploading(true);
     setMessageError(null);
 
     // If this is a new conversation, create it first
@@ -211,6 +223,7 @@ function MessagesPageContent() {
       if (convError || !newConvId) {
         setMessageError(convError || 'Failed to create conversation');
         setSending(false);
+        setUploading(false);
         return;
       }
       
@@ -225,10 +238,43 @@ function MessagesPageContent() {
     if (!conversationId || conversationId === 'new') {
       setMessageError('Invalid conversation');
       setSending(false);
+      setUploading(false);
       return;
     }
 
-    const { data, error: err } = await sendMessage(conversationId, currentUserId, messageText);
+    // Upload file if selected
+    let attachmentUrl: string | undefined;
+    let attachmentType: 'image' | 'file' | undefined;
+    let attachmentName: string | undefined;
+    let attachmentSize: number | undefined;
+
+    if (selectedFile) {
+      const { url, error: uploadError } = await uploadMessageAttachment(selectedFile, currentUserId);
+      
+      if (uploadError || !url) {
+        setMessageError(uploadError || 'Failed to upload file');
+        setSending(false);
+        setUploading(false);
+        return;
+      }
+
+      attachmentUrl = url;
+      attachmentType = getFileType(selectedFile.type);
+      attachmentName = selectedFile.name;
+      attachmentSize = selectedFile.size;
+    }
+
+    setUploading(false);
+
+    const { data, error: err } = await sendMessage(
+      conversationId, 
+      currentUserId, 
+      messageText,
+      attachmentUrl,
+      attachmentType,
+      attachmentName,
+      attachmentSize
+    );
 
     if (err) {
       setMessageError(err);
@@ -237,6 +283,8 @@ function MessagesPageContent() {
     }
 
     setMessageText('');
+    setSelectedFile(null);
+    setFilePreview(null);
     setSending(false);
   };
 
@@ -244,6 +292,41 @@ function MessagesPageContent() {
     setSelectedConversation(null);
     setMessages([]);
     setMessageError(null);
+    setSelectedFile(null);
+    setFilePreview(null);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validation = validateFile(file);
+    if (!validation.isValid) {
+      setMessageError(validation.error || 'Invalid file');
+      return;
+    }
+
+    setSelectedFile(file);
+    setMessageError(null);
+
+    // Create preview for images
+    if (file.type.startsWith('image/')) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setFilePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setFilePreview(null);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+    setFilePreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
   const handleDeleteConversation = async (conversationId: string, e?: React.MouseEvent) => {
@@ -320,9 +403,6 @@ function MessagesPageContent() {
       avatarUrl = conversation?.other_participant?.user_metadata?.avatar_url;
       initials = otherUserName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
     }
-    
-    const charCount = messageText.length;
-    const isValid = charCount > 0 && charCount <= 5000;
 
     return (
       <div className="fixed inset-0 bg-[#1a2c36] flex flex-col">
@@ -388,7 +468,38 @@ function MessagesPageContent() {
                         ? 'bg-[#5fa4c3] text-white rounded-2xl rounded-tr-none' 
                         : 'bg-[#2d3f47] text-white rounded-2xl rounded-tl-none border border-[#3a4f5a]'
                     } px-4 py-2 max-w-xs`}>
-                      <p className="text-sm">{message.content}</p>
+                      {/* Attachment */}
+                      {message.attachment_url && message.attachment_type === 'image' && (
+                        <div className="mb-2">
+                          <img 
+                            src={message.attachment_url} 
+                            alt={message.attachment_name || 'Image'}
+                            className="rounded-lg max-w-full h-auto cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => window.open(message.attachment_url!, '_blank')}
+                          />
+                        </div>
+                      )}
+                      {message.attachment_url && message.attachment_type === 'file' && (
+                        <a 
+                          href={message.attachment_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`flex items-center gap-2 mb-2 p-2 rounded ${
+                            isOwn ? 'bg-white/10' : 'bg-[#1a2c36]'
+                          } hover:opacity-80 transition-opacity`}
+                        >
+                          <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 24 24">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+                            <path d="M14 2v6h6"/>
+                          </svg>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium truncate">{message.attachment_name}</p>
+                            <p className="text-xs opacity-70">{message.attachment_size ? formatFileSize(message.attachment_size) : ''}</p>
+                          </div>
+                        </a>
+                      )}
+                      {/* Text content */}
+                      {message.content && <p className="text-sm">{message.content}</p>}
                       <p className={`text-xs mt-1 text-right ${isOwn ? 'text-blue-100' : 'text-gray-400'}`}>
                         {formatTimestamp(message.created_at)}
                       </p>
@@ -402,12 +513,70 @@ function MessagesPageContent() {
 
           {/* Input */}
           <form onSubmit={handleSendMessage} className="bg-[#2d3f47] border-t border-[#3a4f5a] p-4 flex-shrink-0">
+            {/* File Preview */}
+            {selectedFile && (
+              <div className="mb-3 p-3 bg-[#1a2c36] rounded-lg flex items-center gap-3">
+                {filePreview ? (
+                  <img src={filePreview} alt="Preview" className="w-16 h-16 object-cover rounded" />
+                ) : (
+                  <div className="w-16 h-16 bg-[#2d3f47] rounded flex items-center justify-center">
+                    <svg className="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>
+                      <path d="M14 2v6h6"/>
+                    </svg>
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white truncate">{selectedFile.name}</p>
+                  <p className="text-xs text-gray-400">{formatFileSize(selectedFile.size)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveFile}
+                  className="text-gray-400 hover:text-white transition-colors"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            )}
+            
+            {/* Upload Status */}
+            {uploading && (
+              <div className="mb-2 text-sm text-[#5fa4c3]">
+                Uploading file...
+              </div>
+            )}
+            
             {charCount > 5000 && (
               <div className="text-red-400 text-xs mb-2">
                 Message too long ({charCount}/5000 characters)
               </div>
             )}
+            
             <div className="flex gap-3">
+              {/* File Input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                onChange={handleFileSelect}
+                accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.txt"
+                className="hidden"
+              />
+              
+              {/* Attach Button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending || uploading}
+                className="text-gray-400 hover:text-white transition-colors p-3 disabled:opacity-50"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                </svg>
+              </button>
+              
               <input
                 type="text"
                 placeholder="Message..."
@@ -418,7 +587,7 @@ function MessagesPageContent() {
               />
               <button
                 type="submit"
-                disabled={!isValid || sending}
+                disabled={(!messageText.trim() && !selectedFile) || sending || uploading}
                 className="bg-[#5fa4c3] text-white rounded-full p-3 hover:bg-[#4a8fb5] transition-colors flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {sending ? (
